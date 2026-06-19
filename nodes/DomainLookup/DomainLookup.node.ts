@@ -92,7 +92,6 @@ export class DomainLookup implements INodeType {
 								type: 'string',
 								default: '',
 								placeholder: 'recordId, fields.domain, fields["中文字段"].text',
-								noDataExpression: true,
 								requiresDataPath: 'multiple',
 								typeOptions: {
 									rows: 3,
@@ -125,6 +124,7 @@ export class DomainLookup implements INodeType {
 			try {
 				inputDataConfig = buildInputDataConfig(
 					this.getNodeParameter('options', itemIndex, {}) as InputDataOptions,
+					getRawOptions(this),
 				);
 				const domainInput = this.getNodeParameter('domain', itemIndex);
 				normalized = normalizeDomainInput(domainInput);
@@ -175,6 +175,17 @@ export class DomainLookup implements INodeType {
 	}
 }
 
+function getRawOptions(executeFunctions: IExecuteFunctions): InputDataOptions | undefined {
+	const node = executeFunctions.getNode();
+	if (!isRecord(node) || !isRecord(node.parameters)) {
+		return undefined;
+	}
+
+	return isRecord(node.parameters.options)
+		? (node.parameters.options as unknown as InputDataOptions)
+		: undefined;
+}
+
 function toNodeOperationError(
 	executeFunctions: IExecuteFunctions,
 	error: unknown,
@@ -192,4 +203,8 @@ function toNodeOperationError(
 		description,
 		itemIndex,
 	});
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

@@ -45,7 +45,10 @@ export class InputDataConfigurationError extends Error {
 	}
 }
 
-export function buildInputDataConfig(options: InputDataOptions): InputDataConfig {
+export function buildInputDataConfig(
+	options: InputDataOptions,
+	rawOptions: InputDataOptions = options,
+): InputDataConfig {
 	const inputData = getInputDataValues(options);
 	if (!inputData) {
 		return {
@@ -59,7 +62,8 @@ export function buildInputDataConfig(options: InputDataOptions): InputDataConfig
 	const inputDataMode =
 		inputData.inputDataMode === 'selectedFields' ? 'selectedFields' : 'allFields';
 	if (inputDataMode === 'selectedFields') {
-		const inputFields = parseInputFields(inputData.inputFields ?? '');
+		const rawInputData = getInputDataValues(rawOptions);
+		const inputFields = parseInputFields(rawInputData?.inputFields ?? inputData.inputFields ?? '');
 		if (inputFields.length === 0) {
 			throw new InputDataConfigurationError(
 				'Input Fields must contain at least one field when Input Data Mode is "Selected Fields".',

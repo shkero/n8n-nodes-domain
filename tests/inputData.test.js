@@ -173,6 +173,36 @@ test('selects input fields from n8n expression-wrapped json paths', () => {
 	});
 });
 
+test('uses raw input field expressions when evaluated values are provided', () => {
+	const config = buildInputDataConfig(
+		{
+			inputData: {
+				inputDataMode: 'selectedFields',
+				inputFields: 'rec_test_001',
+			},
+		},
+		{
+			inputData: {
+				inputDataMode: 'selectedFields',
+				inputFields: '={{ $json.recordId }}',
+			},
+		},
+	);
+
+	const merged = mergeInputData(
+		{ asciiDomain: 'example.com' },
+		{
+			recordId: 'rec_test_001',
+			name: 'Alice',
+		},
+		config,
+	);
+
+	assert.deepEqual(merged.input, {
+		recordId: 'rec_test_001',
+	});
+});
+
 test('ignores selected input fields that do not exist', () => {
 	const config = buildInputDataConfig({
 		inputData: {
