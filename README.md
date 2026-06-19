@@ -2,15 +2,40 @@
 
 An n8n community node package for looking up domain registration information.
 
-This package is under active development. The first node, **Domain Lookup**, is intended to accept a domain, subdomain, or HTTP(S) URL and return normalized RDAP registration data that can be used in n8n workflows for expiration checks.
+The first node, **Domain Lookup**, accepts a domain, subdomain, or HTTP(S) URL and returns normalized RDAP registration data that can be used in n8n workflows for expiration checks.
 
-## Planned v1 scope
+## Features
 
 - Normalize user input to an ASCII registrable domain.
 - Collapse subdomains to the registrable domain, for example `api.shop.example.co.uk` to `example.co.uk`.
 - Query free RDAP sources without credentials or API keys.
 - Return a stable output shape for registered, not found, and failure cases.
 - Exclude registrant, contact, address, phone, and other personal data.
+
+## Node
+
+### Domain Lookup
+
+Input:
+
+- `Domain`: a required domain, subdomain, HTTP(S) URL, or no-protocol URL-like value.
+
+Output fields:
+
+- `asciiDomain`
+- `publicSuffix`
+- `isRegistered`
+- `status`
+- `dates.registeredAt`
+- `dates.expiresAt`
+- `dates.lastChangedAt`
+- `dates.dataUpdatedAt`
+- `expiry.daysUntilExpiration`
+- `expiry.isExpired`
+- `nameservers`
+- `source`
+
+`isRegistered` is the field that distinguishes a found domain from an authoritative not-found response.
 
 ## Development
 

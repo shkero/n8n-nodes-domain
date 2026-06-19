@@ -41,10 +41,33 @@ declare module 'n8n-workflow' {
 	}
 
 	export interface IExecuteFunctions {
+		helpers: {
+			httpRequest(options: IHttpRequestOptions): Promise<unknown>;
+		};
+		continueOnFail(): boolean;
+		getInputData(): INodeExecutionData[];
 		getNode(): unknown;
+		getNodeParameter(name: string, itemIndex: number): unknown;
+	}
+
+	export interface IHttpRequestOptions {
+		method?: string;
+		url: string;
+		headers?: Record<string, string>;
+		timeout?: number;
+		json?: boolean;
+		returnFullResponse?: boolean;
+		ignoreHttpStatusErrors?: boolean;
 	}
 
 	export class NodeOperationError extends Error {
-		constructor(node: unknown, message: string);
+		constructor(
+			node: unknown,
+			message: string,
+			options?: {
+				description?: string;
+				itemIndex?: number;
+			},
+		);
 	}
 }

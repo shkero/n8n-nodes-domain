@@ -20,6 +20,7 @@
 	},
 	"scripts": {
 		"build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json && node scripts/copy-assets.js",
+		"test": "npm run build && node --test tests/*.test.js",
 		"typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
 		"format": "node ./node_modules/prettier/bin/prettier.cjs --write .",
 		"format:check": "node ./node_modules/prettier/bin/prettier.cjs --check .",

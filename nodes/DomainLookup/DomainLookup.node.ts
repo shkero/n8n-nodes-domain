@@ -5,6 +5,13 @@ import type {
 	INodeTypeDescription,
 } from 'n8n-workflow';
 import { NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+import {
+	DOMAIN_LOOKUP_ERROR_CODES,
+	DomainLookupError,
+	normalizeDomainInput,
+	type NormalizedDomain,
+} from './domainUtils';
+import { createFailureOutput, lookupDomainRegistration } from './rdap';
 
 export class DomainLookup implements INodeType {
 	description: INodeTypeDescription = {
@@ -36,6 +43,64 @@ export class DomainLookup implements INodeType {
 	};
 
 	async execute(this: IExecuteFunctions): Promise<INodeExecutionData[][]> {
-		throw new NodeOperationError(this.getNode(), 'Domain lookup is not implemented yet');
+		const items = this.getInputData();
+		const returnData: INodeExecutionData[] = [];
+
+		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
+			let normalized: NormalizedDomain | undefined;
+
+			try {
+				const domainInput = this.getNodeParameter('domain', itemIndex);
+				normalized = normalizeDomainInput(domainInput);
+
+				const output = await lookupDomainRegistration(normalized, (options) =>
+					this.helpers.httpRequest(options),
+				);
+				returnData.push({
+					json: output as unknown as Record<string, unknown>,
+					pairedItem: {
+						item: itemIndex,
+					},
+				});
+			} catch (error) {
+				if (this.continueOnFail() && normalized) {
+					const code =
+						error instanceof DomainLookupError
+							? error.code
+							: DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE;
+					const message = error instanceof Error ? error.message : 'Domain lookup failed';
+
+					returnData.push({
+						json: createFailureOutput(normalized, code, message) as unknown as Record<
+							string,
+							unknown
+						>,
+						pairedItem: {
+							item: itemIndex,
+						},
+					});
+					continue;
+				}
+
+				throw toNodeOperationError(this, error, itemIndex);
+			}
+		}
+
+		return [returnData];
 	}
+}
+
+function toNodeOperationError(
+	executeFunctions: IExecuteFunctions,
+	error: unknown,
+	itemIndex: number,
+): NodeOperationError {
+	const message = error instanceof Error ? error.message : 'Domain lookup failed';
+	const description =
+		error instanceof DomainLookupError ? `Error code: ${error.code}` : 'Unexpected lookup error';
+
+	return new NodeOperationError(executeFunctions.getNode(), message, {
+		description,
+		itemIndex,
+	});
 }
