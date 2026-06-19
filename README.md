@@ -14,6 +14,24 @@
 - 为已注册、未找到和失败场景返回稳定的输出结构。
 - 不输出注册人、联系人、地址、电话等个人信息字段。
 
+## 支持的顶级域名
+
+当前支持两类顶级域名：
+
+- `.cn`：直接查询 CNNIC WHOIS `whois.cnnic.cn:43`，不走通用 RDAP fallback。
+- IANA RDAP DNS bootstrap 中发布了 RDAP endpoint 的顶级域名：运行时从 `https://data.iana.org/rdap/dns.json` 获取并缓存 24 小时。
+
+常见可支持示例：
+
+- `.com`
+- `.net`
+- `.org`
+- `.io`
+- `.uk`
+- `.cn`
+
+不支持的顶级域名不会进入 RDAP fallback 检查流程，会直接返回不支持错误，避免把“没有权威查询来源”误判为“域名未注册”。
+
 ## 节点
 
 ### Domain Lookup
@@ -38,6 +56,8 @@
 - `source`
 
 `isRegistered` 是区分“已找到域名”和“权威来源返回未找到”的字段。
+
+`.cn` 查询的 `source.protocol` 为 `whois`；RDAP 查询的 `source.protocol` 为 `rdap`。
 
 ## 开发
 
@@ -73,6 +93,8 @@ npm run format:check
 ## 运行时依赖
 
 本包使用 `tldts` 基于 ICANN Public Suffix List 计算可注册域名。这样才能把 `api.shop.example.co.uk` 正确标准化为 `example.co.uk`，而不是使用不可靠的“取最后两段”规则。
+
+`.cn` 使用 CNNIC WHOIS 查询。CNNIC WHOIS 返回的时间字段没有显式时区，节点会按 UTC 输出为 ISO 8601 字符串，以保持输出格式稳定。
 
 ## 构建说明
 

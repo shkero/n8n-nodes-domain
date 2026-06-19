@@ -14,6 +14,24 @@ The first node, **Domain Lookup**, accepts a domain, subdomain, or HTTP(S) URL a
 - Return a stable output shape for registered, not found, and failure cases.
 - Exclude registrant, contact, address, phone, and other personal data.
 
+## Supported TLDs
+
+This package supports two TLD groups:
+
+- `.cn`: queried directly through CNNIC WHOIS `whois.cnnic.cn:43`; it does not use the generic RDAP fallback path.
+- TLDs published in the IANA RDAP DNS bootstrap: fetched at runtime from `https://data.iana.org/rdap/dns.json` and cached for 24 hours.
+
+Common supported examples:
+
+- `.com`
+- `.net`
+- `.org`
+- `.io`
+- `.uk`
+- `.cn`
+
+Unsupported TLDs do not enter the RDAP fallback lookup flow. The node returns an unsupported TLD error instead, so "no authoritative lookup source" is not misreported as "domain is not registered".
+
 ## Node
 
 ### Domain Lookup
@@ -38,6 +56,8 @@ Output fields:
 - `source`
 
 `isRegistered` is the field that distinguishes a found domain from an authoritative not-found response.
+
+For `.cn` lookups, `source.protocol` is `whois`. For RDAP lookups, `source.protocol` is `rdap`.
 
 ## Development
 
@@ -73,6 +93,8 @@ npm run format:check
 ## Runtime Dependency
 
 This package uses `tldts` to calculate the registrable domain from the ICANN Public Suffix List. This is required so inputs like `api.shop.example.co.uk` normalize correctly to `example.co.uk` instead of using an unsafe "last two labels" rule.
+
+`.cn` uses CNNIC WHOIS. CNNIC WHOIS timestamps do not include an explicit timezone, so the node outputs them as UTC ISO 8601 strings to keep the output format stable.
 
 ## Build Note
 

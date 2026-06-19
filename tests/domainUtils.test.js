@@ -23,6 +23,12 @@ test('normalizes http URLs and removes paths', () => {
 		publicSuffix: 'com',
 		tld: 'com',
 	});
+
+	assert.deepEqual(normalizeDomainInput('api.shop.example.com.cn'), {
+		asciiDomain: 'example.com.cn',
+		publicSuffix: 'com.cn',
+		tld: 'cn',
+	});
 });
 
 test('uses ICANN public suffixes and ignores private suffixes', () => {

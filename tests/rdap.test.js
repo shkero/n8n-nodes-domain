@@ -196,7 +196,7 @@ test('throws when IANA bootstrap does not support the TLD', async () => {
 				return { statusCode: 200, body: bootstrap };
 			},
 		),
-		/TLD "invalid"/,
+		/TLD "\.invalid" is not supported/,
 	);
 	assert.deepEqual(calls, ['https://data.iana.org/rdap/dns.json']);
 });

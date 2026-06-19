@@ -1,11 +1,17 @@
 import { DOMAIN_LOOKUP_ERROR_CODES, DomainLookupError, type NormalizedDomain } from './domainUtils';
+import { lookupCnDomainRegistration } from './whoisCn';
+import {
+	createNotFoundOutput,
+	createRegisteredOutput,
+	type DomainLookupOutput,
+	type LookupSource,
+} from './output';
 
 export const BOOTSTRAP_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 export const REQUEST_TIMEOUT_MS = 5_000;
 export const IANA_RDAP_DNS_BOOTSTRAP_URL = 'https://data.iana.org/rdap/dns.json';
 
 const FALLBACK_RDAP_URLS = ['https://rdap.org/domain/', 'https://www.rdap.net/domain/'];
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface HttpRequestOptions {
 	method: 'GET';
@@ -18,36 +24,6 @@ export interface HttpRequestOptions {
 }
 
 export type HttpRequest = (options: HttpRequestOptions) => Promise<unknown>;
-
-export interface LookupSource {
-	protocol: 'rdap';
-	type: 'authoritative' | 'fallback';
-	url: string;
-	fetchedAt: string;
-}
-
-export interface DomainLookupOutput {
-	asciiDomain: string;
-	publicSuffix: string;
-	isRegistered: boolean | null;
-	status: string[];
-	dates: {
-		registeredAt: string | null;
-		expiresAt: string | null;
-		lastChangedAt: string | null;
-		dataUpdatedAt: string | null;
-	};
-	expiry: {
-		daysUntilExpiration: number | null;
-		isExpired: boolean | null;
-	};
-	nameservers: string[];
-	source: LookupSource | null;
-	error?: {
-		code: string;
-		message: string;
-	};
-}
 
 interface BootstrapCache {
 	expiresAt: number;
@@ -79,12 +55,16 @@ export async function lookupDomainRegistration(
 	httpRequest: HttpRequest,
 	now = new Date(),
 ): Promise<DomainLookupOutput> {
+	if (normalized.tld === 'cn') {
+		return lookupCnDomainRegistration(normalized, now);
+	}
+
 	const bootstrap = await getBootstrap(httpRequest);
 	const authoritativeBaseUrls = findBootstrapUrls(bootstrap, normalized.tld);
 
 	if (authoritativeBaseUrls.length === 0) {
 		throw new DomainLookupError(
-			`IANA RDAP bootstrap does not include TLD "${normalized.tld}"`,
+			`TLD ".${normalized.tld}" is not supported. This package supports .cn through CNNIC WHOIS and TLDs published in the IANA RDAP DNS bootstrap.`,
 			DOMAIN_LOOKUP_ERROR_CODES.TLD_RDAP_NOT_SUPPORTED,
 		);
 	}
@@ -113,35 +93,6 @@ export async function lookupDomainRegistration(
 		'All RDAP sources failed',
 		DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
 	);
-}
-
-export function createFailureOutput(
-	normalized: NormalizedDomain,
-	code: string,
-	message: string,
-): DomainLookupOutput {
-	return {
-		asciiDomain: normalized.asciiDomain,
-		publicSuffix: normalized.publicSuffix,
-		isRegistered: null,
-		status: [],
-		dates: {
-			registeredAt: null,
-			expiresAt: null,
-			lastChangedAt: null,
-			dataUpdatedAt: null,
-		},
-		expiry: {
-			daysUntilExpiration: null,
-			isExpired: null,
-		},
-		nameservers: [],
-		source: null,
-		error: {
-			code,
-			message,
-		},
-	};
 }
 
 export function clearRdapBootstrapCache(): void {
@@ -201,24 +152,20 @@ export function mapRdapDomainObject(
 	}
 
 	const dates = extractDates(body);
-	const expiresAtMs = dates.expiresAt ? Date.parse(dates.expiresAt) : Number.NaN;
-	const hasValidExpiry = Number.isFinite(expiresAtMs);
 
-	return {
-		asciiDomain: normalized.asciiDomain,
-		publicSuffix: normalized.publicSuffix,
-		isRegistered: true,
-		status: extractStatus(body),
-		dates,
-		expiry: {
-			daysUntilExpiration: hasValidExpiry
-				? Math.floor((expiresAtMs - now.getTime()) / DAY_MS)
-				: null,
-			isExpired: hasValidExpiry ? expiresAtMs <= now.getTime() : null,
-		},
-		nameservers: extractNameservers(body),
+	return createRegisteredOutput(
+		normalized,
 		source,
-	};
+		{
+			status: extractStatus(body),
+			registeredAt: dates.registeredAt,
+			expiresAt: dates.expiresAt,
+			lastChangedAt: dates.lastChangedAt,
+			dataUpdatedAt: dates.dataUpdatedAt,
+			nameservers: extractNameservers(body),
+		},
+		now,
+	);
 }
 
 function outputFromRequestResult(
@@ -244,30 +191,6 @@ function outputFromRequestResult(
 	}
 
 	return mapRdapDomainObject(result.body, normalized, source, now);
-}
-
-function createNotFoundOutput(
-	normalized: NormalizedDomain,
-	source: LookupSource,
-): DomainLookupOutput {
-	return {
-		asciiDomain: normalized.asciiDomain,
-		publicSuffix: normalized.publicSuffix,
-		isRegistered: false,
-		status: [],
-		dates: {
-			registeredAt: null,
-			expiresAt: null,
-			lastChangedAt: null,
-			dataUpdatedAt: null,
-		},
-		expiry: {
-			daysUntilExpiration: null,
-			isExpired: null,
-		},
-		nameservers: [],
-		source,
-	};
 }
 
 async function getBootstrap(httpRequest: HttpRequest): Promise<unknown> {

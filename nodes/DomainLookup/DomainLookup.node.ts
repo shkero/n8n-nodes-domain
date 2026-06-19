@@ -11,7 +11,8 @@ import {
 	normalizeDomainInput,
 	type NormalizedDomain,
 } from './domainUtils';
-import { createFailureOutput, lookupDomainRegistration } from './rdap';
+import { createFailureOutput } from './output';
+import { lookupDomainRegistration } from './rdap';
 
 export class DomainLookup implements INodeType {
 	description: INodeTypeDescription = {
