@@ -2,7 +2,10 @@ export type InputDataMode = 'allFields' | 'selectedFields';
 type InputFieldPath = string[];
 
 export interface InputDataOptions {
-	includeInputData?: boolean;
+	inputData?: InputDataValues | InputDataValues[];
+}
+
+export interface InputDataValues {
 	inputDataMode?: InputDataMode;
 	inputFieldName?: string;
 	inputFields?: string;
@@ -43,18 +46,20 @@ export class InputDataConfigurationError extends Error {
 }
 
 export function buildInputDataConfig(options: InputDataOptions): InputDataConfig {
-	if (options.includeInputData !== true) {
+	const inputData = getInputDataValues(options);
+	if (!inputData) {
 		return {
 			includeInputData: false,
 		};
 	}
 
-	const inputFieldName = options.inputFieldName?.trim() || 'input';
+	const inputFieldName = inputData.inputFieldName?.trim() || 'input';
 	validateInputFieldName(inputFieldName);
 
-	const inputDataMode = options.inputDataMode === 'selectedFields' ? 'selectedFields' : 'allFields';
+	const inputDataMode =
+		inputData.inputDataMode === 'selectedFields' ? 'selectedFields' : 'allFields';
 	if (inputDataMode === 'selectedFields') {
-		const inputFields = parseInputFields(options.inputFields ?? '');
+		const inputFields = parseInputFields(inputData.inputFields ?? '');
 		if (inputFields.length === 0) {
 			throw new InputDataConfigurationError(
 				'Input Fields must contain at least one field when Input Data Mode is "Selected Fields".',
@@ -74,6 +79,18 @@ export function buildInputDataConfig(options: InputDataOptions): InputDataConfig
 		inputDataMode,
 		inputFieldName,
 	};
+}
+
+function getInputDataValues(options: InputDataOptions): InputDataValues | null {
+	if (!options.inputData) {
+		return null;
+	}
+
+	if (Array.isArray(options.inputData)) {
+		return options.inputData[0] ?? null;
+	}
+
+	return options.inputData;
 }
 
 export function mergeInputData(

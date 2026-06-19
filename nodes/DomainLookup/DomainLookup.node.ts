@@ -50,68 +50,62 @@ export class DomainLookup implements INodeType {
 			{
 				displayName: 'Options',
 				name: 'options',
-				type: 'collection',
+				type: 'fixedCollection',
 				placeholder: 'Add Option',
 				default: {},
+				typeOptions: {
+					multipleValues: false,
+				},
 				options: [
 					{
 						displayName: 'Include Input Data',
-						name: 'includeInputData',
-						type: 'boolean',
-						default: true,
-						description: "Whether to include the current input item's JSON data in the output",
-					},
-					{
-						displayName: 'Input Data Mode',
-						name: 'inputDataMode',
-						type: 'options',
-						options: [
+						name: 'inputData',
+						values: [
 							{
-								name: 'All Fields',
-								value: 'allFields',
+								displayName: 'Input Data Mode',
+								name: 'inputDataMode',
+								type: 'options',
+								options: [
+									{
+										name: 'All Fields',
+										value: 'allFields',
+									},
+									{
+										name: 'Selected Fields',
+										value: 'selectedFields',
+									},
+								],
+								default: 'allFields',
+								description:
+									"Whether to include all fields or only selected fields from the current input item's JSON data",
 							},
 							{
-								name: 'Selected Fields',
-								value: 'selectedFields',
+								displayName: 'Input Field Name',
+								name: 'inputFieldName',
+								type: 'string',
+								default: 'input',
+								description: 'Name of the output field that contains the input item JSON data',
+							},
+							{
+								displayName: 'Input Fields',
+								name: 'inputFields',
+								type: 'string',
+								default: '',
+								placeholder: 'recordId, fields.domain, fields["中文字段"].text',
+								noDataExpression: true,
+								requiresDataPath: 'multiple',
+								typeOptions: {
+									rows: 3,
+								},
+								displayOptions: {
+									show: {
+										inputDataMode: ['selectedFields'],
+									},
+								},
+								description:
+									'Fields to include from the current input item. Supports comma or newline separated paths, including fields["中文字段"].text for non-English field names.',
 							},
 						],
-						default: 'allFields',
-						displayOptions: {
-							show: {
-								includeInputData: [true],
-							},
-						},
-					},
-					{
-						displayName: 'Input Field Name',
-						name: 'inputFieldName',
-						type: 'string',
-						default: 'input',
-						displayOptions: {
-							show: {
-								includeInputData: [true],
-							},
-						},
-						description: 'Name of the output field that contains the input item JSON data',
-					},
-					{
-						displayName: 'Input Fields',
-						name: 'inputFields',
-						type: 'string',
-						default: '',
-						placeholder: 'recordId, fields.domain, fields["域名"].text',
-						typeOptions: {
-							requiresDataPath: 'multiple',
-							rows: 3,
-						},
-						displayOptions: {
-							show: {
-								includeInputData: [true],
-								inputDataMode: ['selectedFields'],
-							},
-						},
-						description:
-							'Fields to include from the current input item. Supports comma or newline separated paths, including fields["域名"].text for non-English field names.',
 					},
 				],
 			},

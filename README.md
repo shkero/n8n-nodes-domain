@@ -48,6 +48,8 @@
 - `Input Field Name`：输出中的容器字段名，默认是 `input`。字段名只能使用字母、数字、下划线，且不能和节点输出字段冲突。
 - `Input Fields`：在 `Selected Fields` 模式下使用，支持逗号或换行分隔，也可以从 n8n 输入数据面板拖拽多个字段。不存在的字段会被忽略。
 
+`Input Fields` 需要填写字段路径，而不是字段值。中文字段或包含特殊字符的字段建议使用 bracket 写法。
+
 `Input Fields` 示例：
 
 ```text

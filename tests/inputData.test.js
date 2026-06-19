@@ -40,7 +40,7 @@ test('includes all input json fields when all fields mode is enabled', () => {
 		},
 	};
 	const config = buildInputDataConfig({
-		includeInputData: true,
+		inputData: {},
 	});
 
 	const merged = mergeInputData({ asciiDomain: 'example.com' }, inputJson, config);
@@ -60,8 +60,9 @@ test('includes all input json fields when all fields mode is enabled', () => {
 
 test('uses a custom input data field name', () => {
 	const config = buildInputDataConfig({
-		includeInputData: true,
-		inputFieldName: 'sourceItem',
+		inputData: {
+			inputFieldName: 'sourceItem',
+		},
 	});
 
 	const merged = mergeInputData({ asciiDomain: 'example.com' }, { id: 1 }, config);
@@ -76,9 +77,10 @@ test('uses a custom input data field name', () => {
 
 test('selects input fields and preserves nested paths', () => {
 	const config = buildInputDataConfig({
-		includeInputData: true,
-		inputDataMode: 'selectedFields',
-		inputFields: 'id, customer.name\ncustomer.name',
+		inputData: {
+			inputDataMode: 'selectedFields',
+			inputFields: 'id, customer.name\ncustomer.name',
+		},
 	});
 
 	const merged = mergeInputData(
@@ -103,10 +105,11 @@ test('selects input fields and preserves nested paths', () => {
 
 test('selects Chinese input fields using dot and bracket paths', () => {
 	const config = buildInputDataConfig({
-		includeInputData: true,
-		inputDataMode: 'selectedFields',
-		inputFields:
-			'recordId, fields.中文字段.text, fields["中文字段"].title, $json.fields["到期时间"]',
+		inputData: {
+			inputDataMode: 'selectedFields',
+			inputFields:
+				'recordId, fields.中文字段.text, fields["中文字段"].title, $json.fields["到期时间"]',
+		},
 	});
 
 	const merged = mergeInputData(
@@ -141,9 +144,10 @@ test('selects Chinese input fields using dot and bracket paths', () => {
 
 test('selects input fields from n8n expression-wrapped json paths', () => {
 	const config = buildInputDataConfig({
-		includeInputData: true,
-		inputDataMode: 'selectedFields',
-		inputFields: '={{ $json.fields["中文字段"].text }}\n{{ json.fields.domain }}',
+		inputData: {
+			inputDataMode: 'selectedFields',
+			inputFields: '={{ $json.fields["中文字段"].text }}\n{{ json.fields.domain }}',
+		},
 	});
 
 	const merged = mergeInputData(
@@ -171,9 +175,10 @@ test('selects input fields from n8n expression-wrapped json paths', () => {
 
 test('ignores selected input fields that do not exist', () => {
 	const config = buildInputDataConfig({
-		includeInputData: true,
-		inputDataMode: 'selectedFields',
-		inputFields: 'missing, customer.phone',
+		inputData: {
+			inputDataMode: 'selectedFields',
+			inputFields: 'missing, customer.phone',
+		},
 	});
 
 	const merged = mergeInputData(
@@ -190,13 +195,31 @@ test('ignores selected input fields that do not exist', () => {
 	assert.deepEqual(merged.input, {});
 });
 
+test('reads input data values from a fixed collection array', () => {
+	const config = buildInputDataConfig({
+		inputData: [
+			{
+				inputDataMode: 'selectedFields',
+				inputFields: 'id',
+			},
+		],
+	});
+
+	const merged = mergeInputData({ asciiDomain: 'example.com' }, { id: 1, name: 'Alice' }, config);
+
+	assert.deepEqual(merged.input, {
+		id: 1,
+	});
+});
+
 test('rejects an empty selected input fields list', () => {
 	assert.throws(
 		() =>
 			buildInputDataConfig({
-				includeInputData: true,
-				inputDataMode: 'selectedFields',
-				inputFields: '  , \n ',
+				inputData: {
+					inputDataMode: 'selectedFields',
+					inputFields: '  , \n ',
+				},
 			}),
 		/Input Fields must contain at least one field/,
 	);
@@ -206,8 +229,9 @@ test('rejects reserved input data field names', () => {
 	assert.throws(
 		() =>
 			buildInputDataConfig({
-				includeInputData: true,
-				inputFieldName: 'source',
+				inputData: {
+					inputFieldName: 'source',
+				},
 			}),
 		/conflicts with a reserved output field/,
 	);
@@ -217,8 +241,9 @@ test('rejects dotted input data field names', () => {
 	assert.throws(
 		() =>
 			buildInputDataConfig({
-				includeInputData: true,
-				inputFieldName: 'meta.input',
+				inputData: {
+					inputFieldName: 'meta.input',
+				},
 			}),
 		/Input Field Name must start with a letter or underscore/,
 	);
@@ -226,8 +251,9 @@ test('rejects dotted input data field names', () => {
 
 test('can merge input data into a continue-on-fail lookup output', () => {
 	const config = buildInputDataConfig({
-		includeInputData: true,
-		inputFieldName: 'input',
+		inputData: {
+			inputFieldName: 'input',
+		},
 	});
 	const failureOutput = createFailureOutput(
 		normalized,

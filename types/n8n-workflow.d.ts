@@ -38,6 +38,8 @@ declare module 'n8n-workflow' {
 		required?: boolean;
 		placeholder?: string;
 		description?: string;
+		noDataExpression?: boolean;
+		requiresDataPath?: 'single' | 'multiple';
 		displayOptions?: {
 			show?: Record<string, unknown[]>;
 			hide?: Record<string, unknown[]>;
