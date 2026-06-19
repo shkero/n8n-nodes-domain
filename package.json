@@ -1,0 +1,46 @@
+{
+	"name": "n8n-nodes-domain",
+	"version": "0.1.0",
+	"description": "n8n community node for domain registration lookups using RDAP.",
+	"license": "MIT",
+	"homepage": "https://github.com/shkero/n8n-nodes-domain",
+	"keywords": [
+		"n8n-community-node-package",
+		"n8n",
+		"domain",
+		"rdap",
+		"whois"
+	],
+	"author": {
+		"name": "shkero"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/shkero/n8n-nodes-domain.git"
+	},
+	"scripts": {
+		"build": "node ./node_modules/typescript/bin/tsc -p tsconfig.json && node scripts/copy-assets.js",
+		"typecheck": "node ./node_modules/typescript/bin/tsc -p tsconfig.json --noEmit",
+		"format": "node ./node_modules/prettier/bin/prettier.cjs --write .",
+		"format:check": "node ./node_modules/prettier/bin/prettier.cjs --check .",
+		"prepublishOnly": "npm run build"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [],
+		"nodes": [
+			"dist/nodes/DomainLookup/DomainLookup.node.js"
+		]
+	},
+	"dependencies": {
+		"tldts": "7.4.3"
+	},
+	"devDependencies": {
+		"prettier": "3.8.3",
+		"typescript": "5.9.3"
+	}
+}
