@@ -43,10 +43,23 @@
 
 可选设置：
 
-- `Include Input Data`：默认关闭。开启后，把当前输入 item 的 `json` 数据放入输出结果。
+- `Include Input Data`：未添加该选项时关闭；在 `Options` 中添加该选项后默认开启，把当前输入 item 的 `json` 数据放入输出结果。
 - `Input Data Mode`：选择 `All Fields` 时合并完整输入 `json`；选择 `Selected Fields` 时只合并指定字段。
 - `Input Field Name`：输出中的容器字段名，默认是 `input`。字段名只能使用字母、数字、下划线，且不能和节点输出字段冲突。
-- `Input Fields`：在 `Selected Fields` 模式下使用，支持逗号或换行分隔，例如 `id, domain, customer.name`。不存在的字段会被忽略。
+- `Input Fields`：在 `Selected Fields` 模式下使用，支持逗号或换行分隔，也可以从 n8n 输入数据面板拖拽多个字段。不存在的字段会被忽略。
+
+`Input Fields` 示例：
+
+```text
+recordId, fields.domain, fields["中文字段"].text
+```
+
+也支持 n8n 常见的当前 item 路径写法：
+
+```text
+$json.fields["到期时间"]
+={{ $json.fields["中文字段"].text }}
+```
 
 输出字段：
 

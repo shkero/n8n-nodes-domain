@@ -101,6 +101,74 @@ test('selects input fields and preserves nested paths', () => {
 	});
 });
 
+test('selects Chinese input fields using dot and bracket paths', () => {
+	const config = buildInputDataConfig({
+		includeInputData: true,
+		inputDataMode: 'selectedFields',
+		inputFields:
+			'recordId, fields.中文字段.text, fields["中文字段"].title, $json.fields["到期时间"]',
+	});
+
+	const merged = mergeInputData(
+		{ asciiDomain: 'example.cn' },
+		{
+			recordId: 'rec_test_001',
+			fields: {
+				中文字段: {
+					title: 'example.cn',
+					text: 'https://www.example.cn',
+					favicon: '',
+				},
+				domain: 'example.cn',
+				剩余时间: 1.5,
+				到期时间: 1781918650000,
+			},
+		},
+		config,
+	);
+
+	assert.deepEqual(merged.input, {
+		recordId: 'rec_test_001',
+		fields: {
+			中文字段: {
+				title: 'example.cn',
+				text: 'https://www.example.cn',
+			},
+			到期时间: 1781918650000,
+		},
+	});
+});
+
+test('selects input fields from n8n expression-wrapped json paths', () => {
+	const config = buildInputDataConfig({
+		includeInputData: true,
+		inputDataMode: 'selectedFields',
+		inputFields: '={{ $json.fields["中文字段"].text }}\n{{ json.fields.domain }}',
+	});
+
+	const merged = mergeInputData(
+		{ asciiDomain: 'example.cn' },
+		{
+			fields: {
+				中文字段: {
+					text: 'https://www.example.cn',
+				},
+				domain: 'example.cn',
+			},
+		},
+		config,
+	);
+
+	assert.deepEqual(merged.input, {
+		fields: {
+			中文字段: {
+				text: 'https://www.example.cn',
+			},
+			domain: 'example.cn',
+		},
+	});
+});
+
 test('ignores selected input fields that do not exist', () => {
 	const config = buildInputDataConfig({
 		includeInputData: true,

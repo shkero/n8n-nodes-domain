@@ -58,7 +58,7 @@ export class DomainLookup implements INodeType {
 						displayName: 'Include Input Data',
 						name: 'includeInputData',
 						type: 'boolean',
-						default: false,
+						default: true,
 						description: "Whether to include the current input item's JSON data in the output",
 					},
 					{
@@ -99,9 +99,10 @@ export class DomainLookup implements INodeType {
 						name: 'inputFields',
 						type: 'string',
 						default: '',
-						placeholder: 'id, domain, customer.name',
+						placeholder: 'recordId, fields.domain, fields["域名"].text',
 						typeOptions: {
 							requiresDataPath: 'multiple',
+							rows: 3,
 						},
 						displayOptions: {
 							show: {
@@ -109,6 +110,8 @@ export class DomainLookup implements INodeType {
 								inputDataMode: ['selectedFields'],
 							},
 						},
+						description:
+							'Fields to include from the current input item. Supports comma or newline separated paths, including fields["域名"].text for non-English field names.',
 					},
 				],
 			},
