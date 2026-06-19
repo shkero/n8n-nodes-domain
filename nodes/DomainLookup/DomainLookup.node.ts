@@ -84,6 +84,7 @@ export class DomainLookup implements INodeType {
 								name: 'inputFieldName',
 								type: 'string',
 								default: 'input',
+								noDataExpression: true,
 								description: 'Name of the output field that contains the input item JSON data',
 							},
 							{
