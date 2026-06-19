@@ -1,5 +1,6 @@
 export type InputDataMode = 'allFields' | 'selectedFields';
-type InputFieldPath = string[];
+type InputFieldPath = InputFieldPathSegment[];
+type InputFieldPathSegment = string | number;
 
 export interface InputDataOptions {
 	inputData?: InputDataValues | InputDataValues[];
@@ -45,10 +46,7 @@ export class InputDataConfigurationError extends Error {
 	}
 }
 
-export function buildInputDataConfig(
-	options: InputDataOptions,
-	rawOptions: InputDataOptions = options,
-): InputDataConfig {
+export function buildInputDataConfig(options: InputDataOptions = {}): InputDataConfig {
 	const inputData = getInputDataValues(options);
 	if (!inputData) {
 		return {
@@ -62,8 +60,7 @@ export function buildInputDataConfig(
 	const inputDataMode =
 		inputData.inputDataMode === 'selectedFields' ? 'selectedFields' : 'allFields';
 	if (inputDataMode === 'selectedFields') {
-		const rawInputData = getInputDataValues(rawOptions);
-		const inputFields = parseInputFields(rawInputData?.inputFields ?? inputData.inputFields ?? '');
+		const inputFields = parseInputFields(inputData.inputFields ?? '');
 		if (inputFields.length === 0) {
 			throw new InputDataConfigurationError(
 				'Input Fields must contain at least one field when Input Data Mode is "Selected Fields".',
@@ -136,9 +133,16 @@ function parseInputFields(inputFields: string): InputFieldPath[] {
 	const fields: InputFieldPath[] = [];
 
 	for (const field of splitInputFields(inputFields)) {
-		const path = parseInputFieldPath(field);
-		if (!path) {
+		const normalizedField = field.trim();
+		if (normalizedField.length === 0) {
 			continue;
+		}
+
+		const path = parseInputFieldPath(normalizedField);
+		if (!path) {
+			throw new InputDataConfigurationError(
+				`Input Field "${normalizedField}" is not a supported field path.`,
+			);
 		}
 
 		const key = path.join('\u0000');
@@ -236,7 +240,11 @@ function parseInputFieldPath(inputField: string): InputFieldPath | null {
 		return null;
 	}
 
-	return path.every((segment) => segment.length > 0 && isSafePathSegment(segment)) ? path : null;
+	return path.every((segment) => {
+		return (typeof segment === 'number' || segment.length > 0) && isSafePathSegment(segment);
+	})
+		? path
+		: null;
 }
 
 function stripExpressionWrapper(value: string): string {
@@ -277,7 +285,7 @@ function stripJsonPrefix(value: string): string {
 }
 
 function tokenizeInputFieldPath(value: string): InputFieldPath | null {
-	const path: string[] = [];
+	const path: InputFieldPath = [];
 	let index = 0;
 
 	while (index < value.length) {
@@ -304,11 +312,11 @@ function tokenizeInputFieldPath(value: string): InputFieldPath | null {
 		}
 
 		const segment = value.slice(start, index).trim();
-		if (segment.length === 0) {
+		if (segment.length === 0 || !isValidDotPathSegment(segment)) {
 			return null;
 		}
 
-		path.push(segment);
+		path.push(isArrayIndex(segment) ? Number(segment) : segment);
 	}
 
 	return path;
@@ -317,7 +325,7 @@ function tokenizeInputFieldPath(value: string): InputFieldPath | null {
 function readBracketSegment(
 	value: string,
 	startIndex: number,
-): { segment: string; nextIndex: number } | null {
+): { segment: InputFieldPathSegment; nextIndex: number } | null {
 	let index = startIndex + 1;
 	while (value[index] === ' ' || value[index] === '\t') {
 		index += 1;
@@ -325,7 +333,24 @@ function readBracketSegment(
 
 	const quote = value[index];
 	if (quote !== '"' && quote !== "'") {
-		return null;
+		const numberStartIndex = index;
+		while (isDigit(value[index])) {
+			index += 1;
+		}
+
+		const indexText = value.slice(numberStartIndex, index);
+		while (value[index] === ' ' || value[index] === '\t') {
+			index += 1;
+		}
+
+		if (!isArrayIndex(indexText) || value[index] !== ']') {
+			return null;
+		}
+
+		return {
+			segment: Number(indexText),
+			nextIndex: index + 1,
+		};
 	}
 
 	index += 1;
@@ -369,9 +394,18 @@ function readBracketSegment(
 	};
 }
 
-function getPathValue(source: unknown, path: string[]): unknown {
+function getPathValue(source: unknown, path: InputFieldPath): unknown {
 	let current = source;
 	for (const segment of path) {
+		if (typeof segment === 'number') {
+			if (!Array.isArray(current) || segment >= current.length) {
+				return undefined;
+			}
+
+			current = current[segment];
+			continue;
+		}
+
 		if (!isRecord(current) || !Object.prototype.hasOwnProperty.call(current, segment)) {
 			return undefined;
 		}
@@ -382,20 +416,30 @@ function getPathValue(source: unknown, path: string[]): unknown {
 	return current;
 }
 
-function setPathValue(target: Record<string, unknown>, path: string[], value: unknown): void {
-	let current = target;
-	for (let index = 0; index < path.length - 1; index += 1) {
-		const segment = path[index];
-		const next = current[segment];
-
-		if (!isRecord(next)) {
-			current[segment] = {};
-		}
-
-		current = current[segment] as Record<string, unknown>;
+function setPathValue(target: Record<string, unknown>, path: InputFieldPath, value: unknown): void {
+	if (typeof path[0] !== 'string') {
+		return;
 	}
 
-	current[path[path.length - 1]] = value;
+	let current: Record<string, unknown> | unknown[] = target;
+	for (let index = 0; index < path.length - 1; index += 1) {
+		const segment = path[index];
+		const nextSegment = path[index + 1];
+		const next = getContainerValue(current, segment);
+
+		if (!isRecord(next) && !Array.isArray(next)) {
+			setContainerValue(current, segment, typeof nextSegment === 'number' ? [] : {});
+		}
+
+		const created = getContainerValue(current, segment);
+		if (!isRecord(created) && !Array.isArray(created)) {
+			return;
+		}
+
+		current = created;
+	}
+
+	setContainerValue(current, path[path.length - 1], value);
 }
 
 function cloneJsonValue<T>(value: T): T {
@@ -406,6 +450,55 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-function isSafePathSegment(segment: string): boolean {
+function getContainerValue(
+	container: Record<string, unknown> | unknown[],
+	segment: InputFieldPathSegment,
+): unknown {
+	if (typeof segment === 'number') {
+		return Array.isArray(container) ? container[segment] : undefined;
+	}
+
+	return isRecord(container) ? container[segment] : undefined;
+}
+
+function setContainerValue(
+	container: Record<string, unknown> | unknown[],
+	segment: InputFieldPathSegment,
+	value: unknown,
+): void {
+	if (typeof segment === 'number') {
+		if (Array.isArray(container)) {
+			container[segment] = value;
+		}
+		return;
+	}
+
+	if (isRecord(container)) {
+		container[segment] = value;
+	}
+}
+
+function isSafePathSegment(segment: InputFieldPathSegment): boolean {
+	if (typeof segment === 'number') {
+		return Number.isSafeInteger(segment) && segment >= 0;
+	}
+
 	return segment !== '__proto__' && segment !== 'prototype' && segment !== 'constructor';
+}
+
+function isArrayIndex(value: string): boolean {
+	if (!/^(0|[1-9]\d*)$/.test(value)) {
+		return false;
+	}
+
+	const index = Number(value);
+	return Number.isSafeInteger(index) && index >= 0;
+}
+
+function isDigit(value: string | undefined): boolean {
+	return typeof value === 'string' && value >= '0' && value <= '9';
+}
+
+function isValidDotPathSegment(segment: string): boolean {
+	return !/[\s.[\]{}()+\-*/'"`,]/u.test(segment);
 }

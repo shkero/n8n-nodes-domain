@@ -173,36 +173,6 @@ test('selects input fields from n8n expression-wrapped json paths', () => {
 	});
 });
 
-test('uses raw input field expressions when evaluated values are provided', () => {
-	const config = buildInputDataConfig(
-		{
-			inputData: {
-				inputDataMode: 'selectedFields',
-				inputFields: 'rec_test_001',
-			},
-		},
-		{
-			inputData: {
-				inputDataMode: 'selectedFields',
-				inputFields: '={{ $json.recordId }}',
-			},
-		},
-	);
-
-	const merged = mergeInputData(
-		{ asciiDomain: 'example.com' },
-		{
-			recordId: 'rec_test_001',
-			name: 'Alice',
-		},
-		config,
-	);
-
-	assert.deepEqual(merged.input, {
-		recordId: 'rec_test_001',
-	});
-});
-
 test('ignores selected input fields that do not exist', () => {
 	const config = buildInputDataConfig({
 		inputData: {
@@ -225,6 +195,43 @@ test('ignores selected input fields that do not exist', () => {
 	assert.deepEqual(merged.input, {});
 });
 
+test('selects input fields with array indexes', () => {
+	const config = buildInputDataConfig({
+		inputData: {
+			inputDataMode: 'selectedFields',
+			inputFields: 'rows[0].name, rows[1]["中文字段"]',
+		},
+	});
+
+	const merged = mergeInputData(
+		{ asciiDomain: 'example.com' },
+		{
+			rows: [
+				{
+					name: 'Alice',
+					中文字段: 'ignored',
+				},
+				{
+					name: 'Bob',
+					中文字段: 'example.cn',
+				},
+			],
+		},
+		config,
+	);
+
+	assert.deepEqual(merged.input, {
+		rows: [
+			{
+				name: 'Alice',
+			},
+			{
+				中文字段: 'example.cn',
+			},
+		],
+	});
+});
+
 test('reads input data values from a fixed collection array', () => {
 	const config = buildInputDataConfig({
 		inputData: [
@@ -240,6 +247,19 @@ test('reads input data values from a fixed collection array', () => {
 	assert.deepEqual(merged.input, {
 		id: 1,
 	});
+});
+
+test('rejects unsupported input field expressions', () => {
+	assert.throws(
+		() =>
+			buildInputDataConfig({
+				inputData: {
+					inputDataMode: 'selectedFields',
+					inputFields: '={{ $json.recordId + "-suffix" }}',
+				},
+			}),
+		/not a supported field path/,
+	);
 });
 
 test('rejects an empty selected input fields list', () => {

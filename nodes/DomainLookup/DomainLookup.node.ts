@@ -122,10 +122,7 @@ export class DomainLookup implements INodeType {
 			};
 
 			try {
-				inputDataConfig = buildInputDataConfig(
-					this.getNodeParameter('options', itemIndex, {}) as InputDataOptions,
-					getRawOptions(this),
-				);
+				inputDataConfig = buildInputDataConfig(getRawOptions(this));
 				const domainInput = this.getNodeParameter('domain', itemIndex);
 				normalized = normalizeDomainInput(domainInput);
 
