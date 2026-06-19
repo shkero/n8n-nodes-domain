@@ -11,6 +11,13 @@ import {
 	normalizeDomainInput,
 	type NormalizedDomain,
 } from './domainUtils';
+import {
+	buildInputDataConfig,
+	InputDataConfigurationError,
+	mergeInputData,
+	type InputDataConfig,
+	type InputDataOptions,
+} from './inputData';
 import { createFailureOutput } from './output';
 import { lookupDomainRegistration } from './rdap';
 
@@ -40,6 +47,71 @@ export class DomainLookup implements INodeType {
 				placeholder: 'example.com',
 				description: 'Domain, subdomain, or HTTP(S) URL to look up',
 			},
+			{
+				displayName: 'Options',
+				name: 'options',
+				type: 'collection',
+				placeholder: 'Add Option',
+				default: {},
+				options: [
+					{
+						displayName: 'Include Input Data',
+						name: 'includeInputData',
+						type: 'boolean',
+						default: false,
+						description: "Whether to include the current input item's JSON data in the output",
+					},
+					{
+						displayName: 'Input Data Mode',
+						name: 'inputDataMode',
+						type: 'options',
+						options: [
+							{
+								name: 'All Fields',
+								value: 'allFields',
+							},
+							{
+								name: 'Selected Fields',
+								value: 'selectedFields',
+							},
+						],
+						default: 'allFields',
+						displayOptions: {
+							show: {
+								includeInputData: [true],
+							},
+						},
+					},
+					{
+						displayName: 'Input Field Name',
+						name: 'inputFieldName',
+						type: 'string',
+						default: 'input',
+						displayOptions: {
+							show: {
+								includeInputData: [true],
+							},
+						},
+						description: 'Name of the output field that contains the input item JSON data',
+					},
+					{
+						displayName: 'Input Fields',
+						name: 'inputFields',
+						type: 'string',
+						default: '',
+						placeholder: 'id, domain, customer.name',
+						typeOptions: {
+							requiresDataPath: 'multiple',
+						},
+						displayOptions: {
+							show: {
+								includeInputData: [true],
+								inputDataMode: ['selectedFields'],
+							},
+						},
+					},
+				],
+			},
 		],
 	};
 
@@ -49,8 +121,14 @@ export class DomainLookup implements INodeType {
 
 		for (let itemIndex = 0; itemIndex < items.length; itemIndex += 1) {
 			let normalized: NormalizedDomain | undefined;
+			let inputDataConfig: InputDataConfig = {
+				includeInputData: false,
+			};
 
 			try {
+				inputDataConfig = buildInputDataConfig(
+					this.getNodeParameter('options', itemIndex, {}) as InputDataOptions,
+				);
 				const domainInput = this.getNodeParameter('domain', itemIndex);
 				normalized = normalizeDomainInput(domainInput);
 
@@ -58,12 +136,20 @@ export class DomainLookup implements INodeType {
 					this.helpers.httpRequest(options),
 				);
 				returnData.push({
-					json: output as unknown as Record<string, unknown>,
+					json: mergeInputData(
+						output as unknown as Record<string, unknown>,
+						items[itemIndex].json,
+						inputDataConfig,
+					),
 					pairedItem: {
 						item: itemIndex,
 					},
 				});
 			} catch (error) {
+				if (error instanceof InputDataConfigurationError) {
+					throw toNodeOperationError(this, error, itemIndex);
+				}
+
 				if (this.continueOnFail() && normalized) {
 					const code =
 						error instanceof DomainLookupError
@@ -72,10 +158,11 @@ export class DomainLookup implements INodeType {
 					const message = error instanceof Error ? error.message : 'Domain lookup failed';
 
 					returnData.push({
-						json: createFailureOutput(normalized, code, message) as unknown as Record<
-							string,
-							unknown
-						>,
+						json: mergeInputData(
+							createFailureOutput(normalized, code, message) as unknown as Record<string, unknown>,
+							items[itemIndex].json,
+							inputDataConfig,
+						),
 						pairedItem: {
 							item: itemIndex,
 						},
@@ -98,7 +185,11 @@ function toNodeOperationError(
 ): NodeOperationError {
 	const message = error instanceof Error ? error.message : 'Domain lookup failed';
 	const description =
-		error instanceof DomainLookupError ? `Error code: ${error.code}` : 'Unexpected lookup error';
+		error instanceof DomainLookupError
+			? `Error code: ${error.code}`
+			: error instanceof InputDataConfigurationError
+				? 'Configuration error'
+				: 'Unexpected lookup error';
 
 	return new NodeOperationError(executeFunctions.getNode(), message, {
 		description,

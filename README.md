@@ -12,6 +12,7 @@
 - 自动把子域名归并到可注册域名，例如 `api.shop.example.co.uk` 会归并为 `example.co.uk`。
 - 查询免费的 RDAP 数据源，不需要 credentials 或 API key。
 - 为已注册、未找到和失败场景返回稳定的输出结构。
+- 可选将当前输入 item 的 `json` 数据合并到查询结果中，方便后续节点继续使用前置数据。
 - 不输出注册人、联系人、地址、电话等个人信息字段。
 
 ## 支持的顶级域名
@@ -39,6 +40,13 @@
 输入：
 
 - `Domain`：必填。支持域名、子域名、HTTP(S) URL，或无协议的 URL-like 输入。
+
+可选设置：
+
+- `Include Input Data`：默认关闭。开启后，把当前输入 item 的 `json` 数据放入输出结果。
+- `Input Data Mode`：选择 `All Fields` 时合并完整输入 `json`；选择 `Selected Fields` 时只合并指定字段。
+- `Input Field Name`：输出中的容器字段名，默认是 `input`。字段名只能使用字母、数字、下划线，且不能和节点输出字段冲突。
+- `Input Fields`：在 `Selected Fields` 模式下使用，支持逗号或换行分隔，例如 `id, domain, customer.name`。不存在的字段会被忽略。
 
 输出字段：
 

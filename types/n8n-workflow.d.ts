@@ -38,6 +38,12 @@ declare module 'n8n-workflow' {
 		required?: boolean;
 		placeholder?: string;
 		description?: string;
+		displayOptions?: {
+			show?: Record<string, unknown[]>;
+			hide?: Record<string, unknown[]>;
+		};
+		options?: unknown[];
+		typeOptions?: Record<string, unknown>;
 	}
 
 	export interface IExecuteFunctions {
@@ -47,7 +53,7 @@ declare module 'n8n-workflow' {
 		continueOnFail(): boolean;
 		getInputData(): INodeExecutionData[];
 		getNode(): unknown;
-		getNodeParameter(name: string, itemIndex: number): unknown;
+		getNodeParameter(name: string, itemIndex: number, fallbackValue?: unknown): unknown;
 	}
 
 	export interface IHttpRequestOptions {
