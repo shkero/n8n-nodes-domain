@@ -16,7 +16,6 @@ import {
 	InputDataConfigurationError,
 	mergeInputData,
 	type InputDataConfig,
-	type InputDataOptions,
 } from './inputData';
 import { createFailureOutput } from './output';
 import { lookupDomainRegistration } from './rdap';
@@ -107,6 +106,20 @@ export class DomainLookup implements INodeType {
 							},
 						],
 					},
+					{
+						displayName: 'China Domain Delay',
+						name: 'cnDelay',
+						values: [
+							{
+								displayName: 'Delay (ms)',
+								name: 'delayMs',
+								type: 'number',
+								default: 1000,
+								description:
+									'Time to wait in milliseconds before querying a .cn domain (to avoid rate limits)',
+							},
+						],
+					},
 				],
 			},
 		],
@@ -123,9 +136,17 @@ export class DomainLookup implements INodeType {
 			};
 
 			try {
-				inputDataConfig = buildInputDataConfig(getRawOptions(this));
+				const rawOptions = getRawOptions(this);
+				inputDataConfig = buildInputDataConfig(rawOptions);
 				const domainInput = this.getNodeParameter('domain', itemIndex);
 				normalized = normalizeDomainInput(domainInput);
+
+				if (normalized.tld === 'cn') {
+					const delayMs = getCnDelayMs(rawOptions);
+					if (delayMs > 0) {
+						await new Promise((resolve) => setTimeout(resolve, delayMs));
+					}
+				}
 
 				const output = await lookupDomainRegistration(normalized, (options) =>
 					this.helpers.httpRequest(options),
@@ -173,15 +194,24 @@ export class DomainLookup implements INodeType {
 	}
 }
 
-function getRawOptions(executeFunctions: IExecuteFunctions): InputDataOptions | undefined {
+function getRawOptions(executeFunctions: IExecuteFunctions): Record<string, any> | undefined {
 	const node = executeFunctions.getNode();
 	if (!isRecord(node) || !isRecord(node.parameters)) {
 		return undefined;
 	}
 
 	return isRecord(node.parameters.options)
-		? (node.parameters.options as unknown as InputDataOptions)
+		? (node.parameters.options as unknown as Record<string, any>)
 		: undefined;
+}
+
+function getCnDelayMs(options: Record<string, any> | undefined): number {
+	if (!options || !options.cnDelay) {
+		return 0;
+	}
+
+	const cnDelay = Array.isArray(options.cnDelay) ? options.cnDelay[0] : options.cnDelay;
+	return cnDelay?.values?.delayMs ?? 0;
 }
 
 function toNodeOperationError(

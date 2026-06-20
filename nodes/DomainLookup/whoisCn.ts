@@ -23,8 +23,29 @@ export async function lookupCnDomainRegistration(
 		fetchedAt: new Date().toISOString(),
 	};
 
-	const response = await queryCnnicWhois(normalized.asciiDomain);
-	return mapCnnicWhoisResponse(response, normalized, source, now);
+	let attempts = 0;
+	const maxAttempts = 3;
+	let delayMs = 1500;
+
+	while (true) {
+		attempts += 1;
+		try {
+			const response = await queryCnnicWhois(normalized.asciiDomain);
+			return mapCnnicWhoisResponse(response, normalized, source, now);
+		} catch (error) {
+			const isRateLimited =
+				error instanceof DomainLookupError &&
+				(error.message.includes('Queried interval is too short') ||
+					error.message.includes('query limit exceeded'));
+
+			if (isRateLimited && attempts < maxAttempts) {
+				await new Promise((resolve) => setTimeout(resolve, delayMs));
+				delayMs *= 2;
+				continue;
+			}
+			throw error;
+		}
+	}
 }
 
 export function mapCnnicWhoisResponse(
@@ -33,15 +54,39 @@ export function mapCnnicWhoisResponse(
 	source: LookupSource,
 	now = new Date(),
 ): DomainLookupOutput {
-	if (/No matching record\./i.test(response)) {
+	const trimmedResponse = response.trim();
+	if (trimmedResponse.length === 0) {
+		throw new DomainLookupError(
+			'CNNIC WHOIS returned an empty response',
+			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+		);
+	}
+
+	if (/Queried interval is too short/i.test(trimmedResponse)) {
+		throw new DomainLookupError(
+			'CNNIC WHOIS query limit exceeded (Queried interval is too short)',
+			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+		);
+	}
+
+	if (/No matching record\./i.test(trimmedResponse)) {
 		return createNotFoundOutput(normalized, source);
 	}
 
-	const fields = parseWhoisFields(response);
+	const fields = parseWhoisFields(trimmedResponse);
 	const domainName = fields.get('domain name')?.[0]?.toLowerCase();
+
+	if (!domainName) {
+		const snippet = trimmedResponse.slice(0, 200).replace(/\r?\n/g, ' ');
+		throw new DomainLookupError(
+			`CNNIC WHOIS response does not contain a domain name: "${snippet}"`,
+			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+		);
+	}
+
 	if (domainName !== normalized.asciiDomain) {
 		throw new DomainLookupError(
-			'CNNIC WHOIS response is not a valid domain record',
+			`CNNIC WHOIS response domain "${domainName}" does not match requested domain "${normalized.asciiDomain}"`,
 			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
 		);
 	}

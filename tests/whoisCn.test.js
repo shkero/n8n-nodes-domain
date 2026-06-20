@@ -1,7 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const net = require('node:net');
 
-const { mapCnnicWhoisResponse } = require('../dist/nodes/DomainLookup/whoisCn');
+const {
+	mapCnnicWhoisResponse,
+	lookupCnDomainRegistration,
+} = require('../dist/nodes/DomainLookup/whoisCn');
 
 const normalized = {
 	asciiDomain: 'example.cn',
@@ -56,4 +60,107 @@ test('maps CNNIC WHOIS no matching record to not registered', () => {
 	assert.deepEqual(output.status, []);
 	assert.deepEqual(output.nameservers, []);
 	assert.equal(output.source.protocol, 'whois');
+});
+
+test('mapCnnicWhoisResponse throws error for empty response', () => {
+	assert.throws(
+		() => mapCnnicWhoisResponse('   ', normalized, source),
+		/CNNIC WHOIS returned an empty response/,
+	);
+});
+
+test('mapCnnicWhoisResponse throws error for rate limiting response', () => {
+	assert.throws(
+		() => mapCnnicWhoisResponse('Queried interval is too short.', normalized, source),
+		/CNNIC WHOIS query limit exceeded \(Queried interval is too short\)/,
+	);
+});
+
+test('mapCnnicWhoisResponse throws error and contains snippet when domain name is missing', () => {
+	assert.throws(
+		() => mapCnnicWhoisResponse('Some random error occurred\nLine 2 info', normalized, source),
+		/CNNIC WHOIS response does not contain a domain name: "Some random error occurred Line 2 info"/,
+	);
+});
+
+test('mapCnnicWhoisResponse throws error when domain name does not match', () => {
+	assert.throws(
+		() => mapCnnicWhoisResponse('Domain Name: different.cn', normalized, source),
+		/CNNIC WHOIS response domain "different.cn" does not match requested domain "example.cn"/,
+	);
+});
+
+test('lookupCnDomainRegistration retries on rate limit and succeeds if eventual response is successful', async () => {
+	const originalCreateConnection = net.createConnection;
+	const mockResponses = [
+		'Queried interval is too short.',
+		'Queried interval is too short.',
+		'Domain Name: example.cn\nROID: 1-cn\nDomain Status: ok\nRegistration Time: 2021-07-09 12:16:35\nExpiration Time: 2027-07-09 12:16:35',
+	];
+	let connectCount = 0;
+
+	net.createConnection = function (options, connectionListener) {
+		connectCount++;
+		const socket = new (require('node:events').EventEmitter)();
+		socket.write = () => {};
+		socket.setEncoding = () => {};
+		socket.setTimeout = () => {};
+		socket.destroy = () => {};
+
+		process.nextTick(() => {
+			if (connectionListener) connectionListener();
+			const response = mockResponses.shift() || '';
+			socket.emit('data', response);
+			socket.emit('close');
+		});
+
+		return socket;
+	};
+
+	try {
+		const output = await lookupCnDomainRegistration(normalized, new Date('2026-06-19T00:00:00Z'));
+		assert.equal(connectCount, 3);
+		assert.equal(output.isRegistered, true);
+	} finally {
+		net.createConnection = originalCreateConnection;
+	}
+});
+
+test('lookupCnDomainRegistration fails after max retries if rate limiting persists', async () => {
+	const originalCreateConnection = net.createConnection;
+	const mockResponses = [
+		'Queried interval is too short.',
+		'Queried interval is too short.',
+		'Queried interval is too short.',
+		'Queried interval is too short.',
+	];
+	let connectCount = 0;
+
+	net.createConnection = function (options, connectionListener) {
+		connectCount++;
+		const socket = new (require('node:events').EventEmitter)();
+		socket.write = () => {};
+		socket.setEncoding = () => {};
+		socket.setTimeout = () => {};
+		socket.destroy = () => {};
+
+		process.nextTick(() => {
+			if (connectionListener) connectionListener();
+			const response = mockResponses.shift() || '';
+			socket.emit('data', response);
+			socket.emit('close');
+		});
+
+		return socket;
+	};
+
+	try {
+		await assert.rejects(
+			() => lookupCnDomainRegistration(normalized, new Date('2026-06-19T00:00:00Z')),
+			/CNNIC WHOIS query limit exceeded/,
+		);
+		assert.equal(connectCount, 3); // 1 initial + 2 retries
+	} finally {
+		net.createConnection = originalCreateConnection;
+	}
 });
