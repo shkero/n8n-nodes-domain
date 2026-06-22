@@ -69,6 +69,21 @@ RDAP fallback is an internal reliability mechanism, not a node option. When fall
 
 `expiry.expiresAtTimestamp` is the millisecond timestamp for `dates.expiresAt`; it is `null` when no valid expiration time is available. `expiry.daysUntilExpiration` is calculated from the current node execution time and expiration time, rounded down to whole days. This node does not output reminder thresholds; reminder timing should be handled by downstream n8n nodes.
 
+Common error codes:
+
+| Error Code                          | Meaning                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------- |
+| `INVALID_INPUT`                     | The input is not a supported domain, subdomain, or HTTP(S) URL              |
+| `TLD_NOT_SUPPORTED`                 | The domain was normalized, but this package has no lookup route for the TLD |
+| `RDAP_BOOTSTRAP_UNAVAILABLE`        | The IANA RDAP bootstrap request failed or returned an invalid structure     |
+| `RDAP_SOURCE_UNAVAILABLE`           | The RDAP HTTP, network, or service source is unavailable                    |
+| `RDAP_RESPONSE_PARSE_FAILED`        | The RDAP response could not be parsed as a domain object                    |
+| `CNNIC_WHOIS_UNAVAILABLE`           | The CNNIC WHOIS connection, timeout, or network path is unavailable         |
+| `CNNIC_WHOIS_RATE_LIMITED`          | CNNIC WHOIS returned a rate limit response                                  |
+| `CNNIC_WHOIS_RESPONSE_PARSE_FAILED` | The CNNIC WHOIS response could not be parsed as a domain record             |
+
+Invalid input throws a node error by default. Query-stage errors after the domain has been normalized are returned in the structured `error` output when n8n `Continue On Fail` is enabled.
+
 ## Development
 
 Requirements:

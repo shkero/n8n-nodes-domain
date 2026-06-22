@@ -92,6 +92,21 @@ RDAP fallback 是内部可靠性机制，不是节点选项。fallback 成功时
 
 `expiry.expiresAtTimestamp` 是 `dates.expiresAt` 对应的毫秒时间戳；没有有效到期时间时为 `null`。`expiry.daysUntilExpiration` 使用当前节点执行时间和到期时间计算，按完整天数向下取整。本节点不输出提醒阈值；提前多少天提醒应由后续 n8n 节点处理。
 
+常见错误码：
+
+| 错误码                              | 含义                                          |
+| ----------------------------------- | --------------------------------------------- |
+| `INVALID_INPUT`                     | 输入不是可支持的域名、子域名或 HTTP(S) URL    |
+| `TLD_NOT_SUPPORTED`                 | 域名已标准化，但该 TLD 没有项目支持的查询路线 |
+| `RDAP_BOOTSTRAP_UNAVAILABLE`        | IANA RDAP bootstrap 请求失败或响应结构异常    |
+| `RDAP_SOURCE_UNAVAILABLE`           | RDAP 查询来源 HTTP、网络或服务不可用          |
+| `RDAP_RESPONSE_PARSE_FAILED`        | RDAP 响应无法按 domain object 解析            |
+| `CNNIC_WHOIS_UNAVAILABLE`           | CNNIC WHOIS 连接、超时或网络不可用            |
+| `CNNIC_WHOIS_RATE_LIMITED`          | CNNIC WHOIS 返回限流信息                      |
+| `CNNIC_WHOIS_RESPONSE_PARSE_FAILED` | CNNIC WHOIS 响应无法按域名记录解析            |
+
+输入格式错误默认抛出节点错误。已经成功标准化域名后的查询阶段错误，在 n8n `Continue On Fail` 开启时会进入结构化 `error` 输出。
+
 ## 开发
 
 环境要求：

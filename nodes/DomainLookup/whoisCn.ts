@@ -35,8 +35,7 @@ export async function lookupCnDomainRegistration(
 		} catch (error) {
 			const isRateLimited =
 				error instanceof DomainLookupError &&
-				(error.message.includes('Queried interval is too short') ||
-					error.message.includes('query limit exceeded'));
+				error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RATE_LIMITED;
 
 			if (isRateLimited && attempts < maxAttempts) {
 				await new Promise((resolve) => setTimeout(resolve, delayMs));
@@ -81,14 +80,14 @@ export function mapCnnicWhoisResponse(
 	if (trimmedResponse.length === 0) {
 		throw new DomainLookupError(
 			'CNNIC WHOIS returned an empty response',
-			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+			DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RESPONSE_PARSE_FAILED,
 		);
 	}
 
 	if (/Queried interval is too short/i.test(trimmedResponse)) {
 		throw new DomainLookupError(
 			'CNNIC WHOIS query limit exceeded (Queried interval is too short)',
-			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+			DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RATE_LIMITED,
 		);
 	}
 
@@ -103,14 +102,14 @@ export function mapCnnicWhoisResponse(
 		const snippet = trimmedResponse.slice(0, 200).replace(/\r?\n/g, ' ');
 		throw new DomainLookupError(
 			`CNNIC WHOIS response does not contain a domain name: "${snippet}"`,
-			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+			DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RESPONSE_PARSE_FAILED,
 		);
 	}
 
 	if (domainName !== normalized.asciiDomain) {
 		throw new DomainLookupError(
 			`CNNIC WHOIS response domain "${domainName}" does not match requested domain "${normalized.asciiDomain}"`,
-			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+			DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RESPONSE_PARSE_FAILED,
 		);
 	}
 
@@ -162,7 +161,7 @@ function queryCnnicWhois(domain: string): Promise<string> {
 
 			settled = true;
 			reject(
-				new DomainLookupError(error.message, DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE),
+				new DomainLookupError(error.message, DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_UNAVAILABLE),
 			);
 		});
 

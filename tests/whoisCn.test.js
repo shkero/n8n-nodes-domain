@@ -6,6 +6,10 @@ const {
 	mapCnnicWhoisResponse,
 	lookupCnDomainRegistration,
 } = require('../dist/nodes/DomainLookup/whoisCn');
+const {
+	DOMAIN_LOOKUP_ERROR_CODES,
+	DomainLookupError,
+} = require('../dist/nodes/DomainLookup/domainUtils');
 
 const normalized = {
 	asciiDomain: 'example.cn',
@@ -111,28 +115,38 @@ test('lookupCnDomainRegistration sets fetchedAt after a successful WHOIS respons
 test('mapCnnicWhoisResponse throws error for empty response', () => {
 	assert.throws(
 		() => mapCnnicWhoisResponse('   ', normalized, source),
-		/CNNIC WHOIS returned an empty response/,
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RESPONSE_PARSE_FAILED,
 	);
 });
 
 test('mapCnnicWhoisResponse throws error for rate limiting response', () => {
 	assert.throws(
 		() => mapCnnicWhoisResponse('Queried interval is too short.', normalized, source),
-		/CNNIC WHOIS query limit exceeded \(Queried interval is too short\)/,
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RATE_LIMITED,
 	);
 });
 
 test('mapCnnicWhoisResponse throws error and contains snippet when domain name is missing', () => {
 	assert.throws(
 		() => mapCnnicWhoisResponse('Some random error occurred\nLine 2 info', normalized, source),
-		/CNNIC WHOIS response does not contain a domain name: "Some random error occurred Line 2 info"/,
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RESPONSE_PARSE_FAILED &&
+			error.message.includes('Some random error occurred Line 2 info'),
 	);
 });
 
 test('mapCnnicWhoisResponse throws error when domain name does not match', () => {
 	assert.throws(
 		() => mapCnnicWhoisResponse('Domain Name: different.cn', normalized, source),
-		/CNNIC WHOIS response domain "different.cn" does not match requested domain "example.cn"/,
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RESPONSE_PARSE_FAILED &&
+			error.message.includes('different.cn'),
 	);
 });
 
@@ -216,9 +230,73 @@ test('lookupCnDomainRegistration fails after max retries if rate limiting persis
 	try {
 		await assert.rejects(
 			() => lookupCnDomainRegistration(normalized, new Date('2026-06-19T00:00:00Z')),
-			/CNNIC WHOIS query limit exceeded/,
+			(error) =>
+				error instanceof DomainLookupError &&
+				error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_RATE_LIMITED,
 		);
 		assert.equal(connectCount, 3); // 1 initial + 2 retries
+	} finally {
+		net.createConnection = originalCreateConnection;
+	}
+});
+
+test('lookupCnDomainRegistration reports CNNIC_WHOIS_UNAVAILABLE on socket errors', async () => {
+	const originalCreateConnection = net.createConnection;
+
+	net.createConnection = function (options, connectionListener) {
+		const socket = new (require('node:events').EventEmitter)();
+		socket.write = () => {};
+		socket.setEncoding = () => {};
+		socket.setTimeout = () => {};
+		socket.destroy = () => {};
+
+		process.nextTick(() => {
+			if (connectionListener) connectionListener();
+			socket.emit('error', new Error('connect ECONNREFUSED'));
+		});
+
+		return socket;
+	};
+
+	try {
+		await assert.rejects(
+			() => lookupCnDomainRegistration(normalized, new Date('2026-06-19T00:00:00Z')),
+			(error) =>
+				error instanceof DomainLookupError &&
+				error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_UNAVAILABLE,
+		);
+	} finally {
+		net.createConnection = originalCreateConnection;
+	}
+});
+
+test('lookupCnDomainRegistration reports CNNIC_WHOIS_UNAVAILABLE on timeouts', async () => {
+	const originalCreateConnection = net.createConnection;
+
+	net.createConnection = function (options, connectionListener) {
+		const socket = new (require('node:events').EventEmitter)();
+		socket.write = () => {};
+		socket.setEncoding = () => {};
+		socket.setTimeout = () => {};
+		socket.destroy = (error) => {
+			process.nextTick(() => socket.emit('error', error));
+		};
+
+		process.nextTick(() => {
+			if (connectionListener) connectionListener();
+			socket.emit('timeout');
+		});
+
+		return socket;
+	};
+
+	try {
+		await assert.rejects(
+			() => lookupCnDomainRegistration(normalized, new Date('2026-06-19T00:00:00Z')),
+			(error) =>
+				error instanceof DomainLookupError &&
+				error.code === DOMAIN_LOOKUP_ERROR_CODES.CNNIC_WHOIS_UNAVAILABLE,
+		);
 	} finally {
 		net.createConnection = originalCreateConnection;
 	}

@@ -8,6 +8,10 @@ const {
 	lookupDomainRegistration,
 	mapRdapDomainObject,
 } = require('../dist/nodes/DomainLookup/rdap');
+const {
+	DOMAIN_LOOKUP_ERROR_CODES,
+	DomainLookupError,
+} = require('../dist/nodes/DomainLookup/domainUtils');
 
 const normalized = {
 	asciiDomain: 'example.com',
@@ -76,6 +80,32 @@ test('looks up common RDAP bootstrap TLDs through authoritative RDAP paths', asy
 		assert.equal(output.source.protocol, 'rdap');
 		assert.equal(output.error, null);
 	}
+});
+
+test('throws RDAP_BOOTSTRAP_UNAVAILABLE when IANA bootstrap request fails', async () => {
+	clearRdapBootstrapCache();
+
+	await assert.rejects(
+		lookupDomainRegistration(normalized, async () => {
+			throw new Error('bootstrap unavailable');
+		}),
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.RDAP_BOOTSTRAP_UNAVAILABLE,
+	);
+});
+
+test('throws RDAP_BOOTSTRAP_UNAVAILABLE when IANA bootstrap structure is invalid', async () => {
+	clearRdapBootstrapCache();
+
+	await assert.rejects(
+		lookupDomainRegistration(normalized, async () => {
+			return { statusCode: 200, body: { services: null } };
+		}),
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.RDAP_BOOTSTRAP_UNAVAILABLE,
+	);
 });
 
 test('maps RDAP domain fields to stable output', () => {
@@ -311,6 +341,40 @@ test('falls back to rdap.net after invalid authoritative RDAP response', async (
 	assert.equal(output.source.type, 'fallback');
 });
 
+test('throws RDAP_RESPONSE_PARSE_FAILED when RDAP JSON stays invalid after fallback', async () => {
+	clearRdapBootstrapCache();
+
+	await assert.rejects(
+		lookupDomainRegistration(normalized, async (options) => {
+			if (options.url === 'https://data.iana.org/rdap/dns.json') {
+				return { statusCode: 200, body: bootstrap };
+			}
+
+			return { statusCode: 200, body: 'not json' };
+		}),
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.RDAP_RESPONSE_PARSE_FAILED,
+	);
+});
+
+test('throws RDAP_RESPONSE_PARSE_FAILED when RDAP response is not a domain object', async () => {
+	clearRdapBootstrapCache();
+
+	await assert.rejects(
+		lookupDomainRegistration(normalized, async (options) => {
+			if (options.url === 'https://data.iana.org/rdap/dns.json') {
+				return { statusCode: 200, body: bootstrap };
+			}
+
+			return { statusCode: 200, body: { objectClassName: 'entity' } };
+		}),
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.RDAP_RESPONSE_PARSE_FAILED,
+	);
+});
+
 for (const statusCode of [400, 401, 403]) {
 	test(`does not fallback after authoritative HTTP ${statusCode}`, async () => {
 		clearRdapBootstrapCache();
@@ -368,7 +432,9 @@ test('throws when every RDAP source fails', async () => {
 
 			return { statusCode: 500, body: {} };
 		}),
-		/All RDAP sources failed/,
+		(error) =>
+			error instanceof DomainLookupError &&
+			error.code === DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
 	);
 	assert.deepEqual(calls, [
 		'https://data.iana.org/rdap/dns.json',

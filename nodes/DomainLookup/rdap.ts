@@ -1,4 +1,9 @@
-import { DOMAIN_LOOKUP_ERROR_CODES, DomainLookupError, type NormalizedDomain } from './domainUtils';
+import {
+	DOMAIN_LOOKUP_ERROR_CODES,
+	DomainLookupError,
+	type DomainLookupErrorCode,
+	type NormalizedDomain,
+} from './domainUtils';
 import { lookupCnDomainRegistration } from './whoisCn';
 import {
 	createFailureOutput,
@@ -45,6 +50,7 @@ interface RequestNotFound {
 interface RequestFailure {
 	kind: 'failure';
 	message: string;
+	code: DomainLookupErrorCode;
 	fallbackEligible: boolean;
 }
 
@@ -90,10 +96,7 @@ export async function lookupDomainRegistration(
 
 	const blockingFailure = failures.find((failure) => !failure.fallbackEligible);
 	if (blockingFailure) {
-		throw new DomainLookupError(
-			blockingFailure.message,
-			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
-		);
+		throw new DomainLookupError(blockingFailure.message, blockingFailure.code);
 	}
 
 	if (failures.length === 0) {
@@ -103,6 +106,8 @@ export async function lookupDomainRegistration(
 		);
 	}
 
+	const fallbackFailures: RequestFailure[] = [];
+
 	for (const baseUrl of FALLBACK_RDAP_URLS) {
 		const url = `${baseUrl}${encodeURIComponent(normalized.asciiDomain)}`;
 		const result = await requestRdap(url, httpRequest);
@@ -111,11 +116,17 @@ export async function lookupDomainRegistration(
 		if (output) {
 			return output;
 		}
+
+		if (result.kind === 'failure') {
+			fallbackFailures.push(result);
+		}
 	}
 
+	const lastFailure =
+		fallbackFailures[fallbackFailures.length - 1] ?? failures[failures.length - 1];
 	throw new DomainLookupError(
-		'All RDAP sources failed',
-		DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+		lastFailure?.message ?? 'All RDAP sources failed',
+		lastFailure?.code ?? DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
 	);
 }
 
@@ -227,14 +238,14 @@ async function getBootstrap(httpRequest: HttpRequest): Promise<unknown> {
 	if (result.kind !== 'success') {
 		throw new DomainLookupError(
 			'IANA RDAP bootstrap is unavailable',
-			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+			DOMAIN_LOOKUP_ERROR_CODES.RDAP_BOOTSTRAP_UNAVAILABLE,
 		);
 	}
 
 	if (!isRecord(result.body) || !Array.isArray(result.body.services)) {
 		throw new DomainLookupError(
 			'IANA RDAP bootstrap response is invalid',
-			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+			DOMAIN_LOOKUP_ERROR_CODES.RDAP_BOOTSTRAP_UNAVAILABLE,
 		);
 	}
 
@@ -256,6 +267,7 @@ async function requestRdap(url: string, httpRequest: HttpRequest): Promise<Reque
 		return {
 			kind: 'failure',
 			message: 'RDAP response is not a domain object',
+			code: DOMAIN_LOOKUP_ERROR_CODES.RDAP_RESPONSE_PARSE_FAILED,
 			fallbackEligible: true,
 		};
 	}
@@ -291,6 +303,7 @@ async function requestJson(url: string, httpRequest: HttpRequest): Promise<Reque
 			return {
 				kind: 'failure',
 				message: `HTTP ${statusCode ?? 'unknown'} from ${url}`,
+				code: DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
 				fallbackEligible: isFallbackEligibleHttpStatus(statusCode),
 			};
 		}
@@ -307,6 +320,7 @@ async function requestJson(url: string, httpRequest: HttpRequest): Promise<Reque
 				return {
 					kind: 'failure',
 					message: 'Response body is not valid JSON',
+					code: DOMAIN_LOOKUP_ERROR_CODES.RDAP_RESPONSE_PARSE_FAILED,
 					fallbackEligible: true,
 				};
 			}
@@ -329,6 +343,7 @@ async function requestJson(url: string, httpRequest: HttpRequest): Promise<Reque
 		return {
 			kind: 'failure',
 			message: error instanceof Error ? error.message : 'Request failed',
+			code: DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
 			fallbackEligible: isFallbackEligibleHttpStatus(statusCode),
 		};
 	}

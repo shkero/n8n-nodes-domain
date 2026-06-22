@@ -1,7 +1,11 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 
-const { normalizeDomainInput } = require('../dist/nodes/DomainLookup/domainUtils');
+const {
+	DOMAIN_LOOKUP_ERROR_CODES,
+	DomainLookupError,
+	normalizeDomainInput,
+} = require('../dist/nodes/DomainLookup/domainUtils');
 
 test('normalizes a bare domain', () => {
 	assert.deepEqual(normalizeDomainInput('Example.COM'), {
@@ -54,4 +58,12 @@ test('rejects unsupported input forms', () => {
 	assert.throws(() => normalizeDomainInput('co.uk'), /registrable domain/);
 	assert.throws(() => normalizeDomainInput('127.0.0.1'), /IP addresses/);
 	assert.throws(() => normalizeDomainInput('*.example.com'), /Wildcard/);
+});
+
+test('rejects invalid input with INVALID_INPUT error code', () => {
+	assert.throws(
+		() => normalizeDomainInput('admin@example.com'),
+		(error) =>
+			error instanceof DomainLookupError && error.code === DOMAIN_LOOKUP_ERROR_CODES.INVALID_INPUT,
+	);
 });
