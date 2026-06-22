@@ -21,6 +21,7 @@ export interface DomainLookupOutput {
 		dataUpdatedAt: string | null;
 	};
 	expiry: {
+		expiresAtTimestamp: number | null;
 		daysUntilExpiration: number | null;
 		isExpired: boolean | null;
 	};
@@ -46,6 +47,7 @@ export function createFailureOutput(
 			dataUpdatedAt: null,
 		},
 		expiry: {
+			expiresAtTimestamp: null,
 			daysUntilExpiration: null,
 			isExpired: null,
 		},
@@ -86,6 +88,7 @@ export function createRegisteredOutput(
 			dataUpdatedAt: values.dataUpdatedAt ?? null,
 		},
 		expiry: {
+			expiresAtTimestamp: hasValidExpiry ? expiresAtMs : null,
 			daysUntilExpiration: hasValidExpiry
 				? Math.floor((expiresAtMs - now.getTime()) / DAY_MS)
 				: null,
@@ -113,6 +116,7 @@ export function createNotFoundOutput(
 			dataUpdatedAt: null,
 		},
 		expiry: {
+			expiresAtTimestamp: null,
 			daysUntilExpiration: null,
 			isExpired: null,
 		},

@@ -15,14 +15,8 @@ const WHOIS_REQUEST_TIMEOUT_MS = 5_000;
 export async function lookupCnDomainRegistration(
 	normalized: NormalizedDomain,
 	now = new Date(),
+	createFetchedAt = () => new Date().toISOString(),
 ): Promise<DomainLookupOutput> {
-	const source: LookupSource = {
-		protocol: 'whois',
-		type: 'authoritative',
-		url: `${CNNIC_WHOIS_BASE_URL}/${normalized.asciiDomain}`,
-		fetchedAt: new Date().toISOString(),
-	};
-
 	let attempts = 0;
 	const maxAttempts = 3;
 	let delayMs = 1500;
@@ -31,7 +25,13 @@ export async function lookupCnDomainRegistration(
 		attempts += 1;
 		try {
 			const response = await queryCnnicWhois(normalized.asciiDomain);
-			return mapCnnicWhoisResponse(response, normalized, source, now);
+			const output = mapCnnicWhoisResponse(
+				response,
+				normalized,
+				createCnnicWhoisSource(normalized, ''),
+				now,
+			);
+			return withSourceFetchedAt(output, createFetchedAt());
 		} catch (error) {
 			const isRateLimited =
 				error instanceof DomainLookupError &&
@@ -46,6 +46,29 @@ export async function lookupCnDomainRegistration(
 			throw error;
 		}
 	}
+}
+
+function createCnnicWhoisSource(normalized: NormalizedDomain, fetchedAt: string): LookupSource {
+	return {
+		protocol: 'whois',
+		type: 'authoritative',
+		url: `${CNNIC_WHOIS_BASE_URL}/${normalized.asciiDomain}`,
+		fetchedAt,
+	};
+}
+
+function withSourceFetchedAt(output: DomainLookupOutput, fetchedAt: string): DomainLookupOutput {
+	if (!output.source) {
+		return output;
+	}
+
+	return {
+		...output,
+		source: {
+			...output.source,
+			fetchedAt,
+		},
+	};
 }
 
 export function mapCnnicWhoisResponse(

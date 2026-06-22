@@ -47,6 +47,7 @@ test('maps CNNIC WHOIS domain records to the standard output shape', () => {
 	assert.equal(output.dates.expiresAt, '2027-05-05T05:38:46.000Z');
 	assert.equal(output.dates.lastChangedAt, null);
 	assert.equal(output.dates.dataUpdatedAt, null);
+	assert.equal(output.expiry.expiresAtTimestamp, Date.parse('2027-05-05T05:38:46.000Z'));
 	assert.equal(output.expiry.isExpired, false);
 	assert.equal(output.source.protocol, 'whois');
 	assert.equal(output.source.type, 'authoritative');
@@ -59,8 +60,52 @@ test('maps CNNIC WHOIS no matching record to not registered', () => {
 	assert.equal(output.isRegistered, false);
 	assert.deepEqual(output.status, []);
 	assert.deepEqual(output.nameservers, []);
+	assert.equal(output.expiry.expiresAtTimestamp, null);
 	assert.equal(output.source.protocol, 'whois');
 	assert.equal(output.error, null);
+});
+
+test('lookupCnDomainRegistration sets fetchedAt after a successful WHOIS response', async () => {
+	const originalCreateConnection = net.createConnection;
+	let responseClosed = false;
+	let fetchedAtCalls = 0;
+
+	net.createConnection = function (options, connectionListener) {
+		const socket = new (require('node:events').EventEmitter)();
+		socket.write = () => {};
+		socket.setEncoding = () => {};
+		socket.setTimeout = () => {};
+		socket.destroy = () => {};
+
+		process.nextTick(() => {
+			if (connectionListener) connectionListener();
+			socket.emit(
+				'data',
+				'Domain Name: example.cn\nROID: 1-cn\nDomain Status: ok\nRegistration Time: 2021-07-09 12:16:35\nExpiration Time: 2027-07-09 12:16:35',
+			);
+			responseClosed = true;
+			socket.emit('close');
+		});
+
+		return socket;
+	};
+
+	try {
+		const output = await lookupCnDomainRegistration(
+			normalized,
+			new Date('2026-06-19T00:00:00Z'),
+			() => {
+				fetchedAtCalls++;
+				assert.equal(responseClosed, true);
+				return '2026-06-19T03:21:00.000Z';
+			},
+		);
+
+		assert.equal(fetchedAtCalls, 1);
+		assert.equal(output.source.fetchedAt, '2026-06-19T03:21:00.000Z');
+	} finally {
+		net.createConnection = originalCreateConnection;
+	}
 });
 
 test('mapCnnicWhoisResponse throws error for empty response', () => {
@@ -99,6 +144,8 @@ test('lookupCnDomainRegistration retries on rate limit and succeeds if eventual 
 		'Domain Name: example.cn\nROID: 1-cn\nDomain Status: ok\nRegistration Time: 2021-07-09 12:16:35\nExpiration Time: 2027-07-09 12:16:35',
 	];
 	let connectCount = 0;
+	let finalResponseClosed = false;
+	let fetchedAtCalls = 0;
 
 	net.createConnection = function (options, connectionListener) {
 		connectCount++;
@@ -112,6 +159,7 @@ test('lookupCnDomainRegistration retries on rate limit and succeeds if eventual 
 			if (connectionListener) connectionListener();
 			const response = mockResponses.shift() || '';
 			socket.emit('data', response);
+			finalResponseClosed = response.startsWith('Domain Name:');
 			socket.emit('close');
 		});
 
@@ -119,9 +167,19 @@ test('lookupCnDomainRegistration retries on rate limit and succeeds if eventual 
 	};
 
 	try {
-		const output = await lookupCnDomainRegistration(normalized, new Date('2026-06-19T00:00:00Z'));
+		const output = await lookupCnDomainRegistration(
+			normalized,
+			new Date('2026-06-19T00:00:00Z'),
+			() => {
+				fetchedAtCalls++;
+				assert.equal(finalResponseClosed, true);
+				return '2026-06-19T03:22:00.000Z';
+			},
+		);
 		assert.equal(connectCount, 3);
+		assert.equal(fetchedAtCalls, 1);
 		assert.equal(output.isRegistered, true);
+		assert.equal(output.source.fetchedAt, '2026-06-19T03:22:00.000Z');
 	} finally {
 		net.createConnection = originalCreateConnection;
 	}

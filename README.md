@@ -75,6 +75,7 @@ $json.fields["到期时间"]
 - `dates.expiresAt`
 - `dates.lastChangedAt`
 - `dates.dataUpdatedAt`
+- `expiry.expiresAtTimestamp`
 - `expiry.daysUntilExpiration`
 - `expiry.isExpired`
 - `nameservers`
@@ -88,6 +89,8 @@ $json.fields["到期时间"]
 查询成功或权威来源明确未找到时，`error` 为 `null`。无法判断注册状态时，`isRegistered` 为 `null`，并通过 `error.code` 输出原因，例如 `TLD_NOT_SUPPORTED`。
 
 RDAP fallback 是内部可靠性机制，不是节点选项。fallback 成功时，`source.type` 为 `fallback`，`source.url` 记录本节点请求的 fallback 入口 URL。
+
+`expiry.expiresAtTimestamp` 是 `dates.expiresAt` 对应的毫秒时间戳；没有有效到期时间时为 `null`。`expiry.daysUntilExpiration` 使用当前节点执行时间和到期时间计算，按完整天数向下取整。本节点不输出提醒阈值；提前多少天提醒应由后续 n8n 节点处理。
 
 ## 开发
 

@@ -314,6 +314,7 @@ test('can merge input data into a continue-on-fail lookup output', () => {
 	const merged = mergeInputData(failureOutput, { id: 1, domain: 'api.example.com' }, config);
 
 	assert.equal(merged.isRegistered, null);
+	assert.equal(merged.expiry.expiresAtTimestamp, null);
 	assert.deepEqual(merged.input, {
 		id: 1,
 		domain: 'api.example.com',

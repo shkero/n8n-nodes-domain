@@ -52,6 +52,7 @@ Output fields:
 - `dates.expiresAt`
 - `dates.lastChangedAt`
 - `dates.dataUpdatedAt`
+- `expiry.expiresAtTimestamp`
 - `expiry.daysUntilExpiration`
 - `expiry.isExpired`
 - `nameservers`
@@ -65,6 +66,8 @@ For `.cn` lookups, `source.protocol` is `whois`. For RDAP lookups, `source.proto
 For successful lookups and authoritative not-found responses, `error` is `null`. When the node cannot determine the registration status, `isRegistered` is `null` and `error.code` contains the reason, for example `TLD_NOT_SUPPORTED`.
 
 RDAP fallback is an internal reliability mechanism, not a node option. When fallback succeeds, `source.type` is `fallback`, and `source.url` records the fallback entry URL requested by this node.
+
+`expiry.expiresAtTimestamp` is the millisecond timestamp for `dates.expiresAt`; it is `null` when no valid expiration time is available. `expiry.daysUntilExpiration` is calculated from the current node execution time and expiration time, rounded down to whole days. This node does not output reminder thresholds; reminder timing should be handled by downstream n8n nodes.
 
 ## Development
 

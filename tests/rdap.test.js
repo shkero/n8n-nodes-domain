@@ -60,6 +60,7 @@ test('maps RDAP domain fields to stable output', () => {
 		dataUpdatedAt: '2026-06-19T00:00:00.000Z',
 	});
 	assert.deepEqual(output.expiry, {
+		expiresAtTimestamp: Date.parse('2027-08-13T04:00:00.000Z'),
 		daysUntilExpiration: 420,
 		isExpired: false,
 	});
@@ -84,6 +85,7 @@ test('maps missing expiration to null expiry', () => {
 	);
 
 	assert.equal(output.expiry.daysUntilExpiration, null);
+	assert.equal(output.expiry.expiresAtTimestamp, null);
 	assert.equal(output.expiry.isExpired, null);
 });
 
@@ -104,6 +106,7 @@ test('maps expired domains to negative whole days', () => {
 	);
 
 	assert.deepEqual(output.expiry, {
+		expiresAtTimestamp: Date.parse('2026-06-17T12:00:00.000Z'),
 		daysUntilExpiration: -2,
 		isExpired: true,
 	});
@@ -151,6 +154,7 @@ test('returns not found on authoritative 404 without fallback', async () => {
 
 	assert.equal(output.isRegistered, false);
 	assert.equal(output.source.type, 'authoritative');
+	assert.equal(output.expiry.expiresAtTimestamp, null);
 	assert.equal(output.error, null);
 	assert.deepEqual(calls, [
 		'https://data.iana.org/rdap/dns.json',
