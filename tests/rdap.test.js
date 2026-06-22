@@ -16,12 +16,66 @@ const normalized = {
 };
 
 const bootstrap = {
-	services: [[['com'], ['https://rdap.example.test/']]],
+	services: [
+		[['com'], ['https://rdap.example.test/']],
+		[['org'], ['https://rdap-org.example.test/']],
+		[['xyz'], ['https://rdap-xyz.example.test/']],
+	],
 };
+
+const commonRdapTlds = [
+	{
+		asciiDomain: 'example.com',
+		publicSuffix: 'com',
+		tld: 'com',
+		authoritativeUrl: 'https://rdap.example.test/domain/example.com',
+	},
+	{
+		asciiDomain: 'example.org',
+		publicSuffix: 'org',
+		tld: 'org',
+		authoritativeUrl: 'https://rdap-org.example.test/domain/example.org',
+	},
+	{
+		asciiDomain: 'example.xyz',
+		publicSuffix: 'xyz',
+		tld: 'xyz',
+		authoritativeUrl: 'https://rdap-xyz.example.test/domain/example.xyz',
+	},
+];
 
 test('finds authoritative RDAP URLs by TLD', () => {
 	assert.deepEqual(findBootstrapUrls(bootstrap, 'com'), ['https://rdap.example.test/']);
+	assert.deepEqual(findBootstrapUrls(bootstrap, 'org'), ['https://rdap-org.example.test/']);
+	assert.deepEqual(findBootstrapUrls(bootstrap, 'xyz'), ['https://rdap-xyz.example.test/']);
 	assert.deepEqual(findBootstrapUrls(bootstrap, 'invalid'), []);
+});
+
+test('looks up common RDAP bootstrap TLDs through authoritative RDAP paths', async () => {
+	for (const testCase of commonRdapTlds) {
+		clearRdapBootstrapCache();
+		const calls = [];
+		const output = await lookupDomainRegistration(testCase, async (options) => {
+			calls.push(options.url);
+			if (options.url === 'https://data.iana.org/rdap/dns.json') {
+				return { statusCode: 200, body: bootstrap };
+			}
+
+			assert.equal(options.url, testCase.authoritativeUrl);
+			return {
+				statusCode: 200,
+				body: {
+					objectClassName: 'domain',
+					events: [{ eventAction: 'expiration', eventDate: '2027-08-13T04:00:00Z' }],
+				},
+			};
+		});
+
+		assert.deepEqual(calls, ['https://data.iana.org/rdap/dns.json', testCase.authoritativeUrl]);
+		assert.equal(output.source.type, 'authoritative');
+		assert.equal(output.source.protocol, 'rdap');
+		assert.equal(output.error, null);
+	}
 });
 
 test('maps RDAP domain fields to stable output', () => {
