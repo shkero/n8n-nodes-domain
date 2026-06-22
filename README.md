@@ -10,16 +10,16 @@
 
 - 将用户输入标准化为 ASCII 可注册域名。
 - 自动把子域名归并到可注册域名，例如 `api.shop.example.co.uk` 会归并为 `example.co.uk`。
-- 查询免费的 IANA RDAP 或 CNNIC WHOIS 数据源，不需要 credentials 或 API key。
+- 查询免费的 IANA RDAP 或注册局 WHOIS 数据源，不需要 credentials 或 API key。
 - 为已注册、未找到和失败场景返回稳定的输出结构。
 - 可选将当前输入 item 的 `json` 数据合并到查询结果中，方便后续节点继续使用前置数据。
 - 不输出注册人、联系人、地址、电话等个人信息字段。
 
 ## 查询路线
 
-节点当前有两条查询路线：
+节点当前有两类查询路线：
 
-- 根 TLD 为 `.cn` 的域名，包括 `.cn`、`.com.cn`、`.net.cn`、`.org.cn` 等：直接查询 CNNIC WHOIS `whois.cnnic.cn:43`，不走通用 RDAP fallback。
+- 专用 WHOIS provider：根 TLD 为 `.cn` 的域名查询 CNNIC WHOIS `whois.cnnic.cn:43`；根 TLD 为 `.io` 的域名查询 `whois.nic.io:43`；根 TLD 为 `.co` 的域名查询 `whois.registry.co:43`。
 - IANA RDAP DNS bootstrap 中发布了 RDAP endpoint 的 TLD：运行时从 `https://data.iana.org/rdap/dns.json` 获取，并在当前 n8n 进程内缓存最多 24 小时。
 
 常见可查询示例：
@@ -30,8 +30,12 @@
 - `.xyz`
 - `.uk`
 - `.cn`
+- `.io`
+- `.co`
 
-如果标准化后的 TLD 既不属于 `.cn` 查询路线，也没有出现在运行时 IANA RDAP DNS bootstrap 中，节点会输出结构化 `TLD_NOT_SUPPORTED` 结果，不请求 RDAP fallback，避免把“没有权威查询来源”误判为“域名未注册”。
+专用 WHOIS 查询不走 RDAP fallback。RDAP fallback 只作为 RDAP 查询路线的内部可靠性机制。
+
+如果标准化后的 TLD 既不属于专用 WHOIS provider，也没有出现在运行时 IANA RDAP DNS bootstrap 中，节点会输出结构化 `TLD_NOT_SUPPORTED` 结果，不请求 RDAP fallback，避免把“没有权威查询来源”误判为“域名未注册”。
 
 ## 节点
 
@@ -74,7 +78,7 @@ $json.fields["到期时间"]
 
 `isRegistered` 是区分“已找到域名”和“权威来源返回未找到”的字段。
 
-`.cn` 查询的 `source.protocol` 为 `whois`；RDAP 查询的 `source.protocol` 为 `rdap`。
+`.cn`、`.io`、`.co` 查询的 `source.protocol` 为 `whois`；RDAP 查询的 `source.protocol` 为 `rdap`。
 
 查询成功或权威来源明确未找到时，`error` 为 `null`。无法判断注册状态时，`isRegistered` 为 `null`，并通过 `error.code` 输出原因，例如 `TLD_NOT_SUPPORTED`。
 
@@ -91,6 +95,9 @@ RDAP fallback 是内部可靠性机制，不是节点选项。fallback 成功时
 | `RDAP_BOOTSTRAP_UNAVAILABLE`        | IANA RDAP bootstrap 请求失败或响应结构异常    |
 | `RDAP_SOURCE_UNAVAILABLE`           | RDAP 查询来源 HTTP、网络或服务不可用          |
 | `RDAP_RESPONSE_PARSE_FAILED`        | RDAP 响应无法按 domain object 解析            |
+| `WHOIS_SOURCE_UNAVAILABLE`          | 注册局 WHOIS 连接、超时或网络不可用           |
+| `WHOIS_RATE_LIMITED`                | 注册局 WHOIS 返回限流信息                     |
+| `WHOIS_RESPONSE_PARSE_FAILED`       | 注册局 WHOIS 响应无法按域名记录解析           |
 | `CNNIC_WHOIS_UNAVAILABLE`           | CNNIC WHOIS 连接、超时或网络不可用            |
 | `CNNIC_WHOIS_RATE_LIMITED`          | CNNIC WHOIS 返回限流信息                      |
 | `CNNIC_WHOIS_RESPONSE_PARSE_FAILED` | CNNIC WHOIS 响应无法按域名记录解析            |
@@ -133,6 +140,8 @@ npm run format:check
 本包使用 `tldts` 基于 ICANN Public Suffix List 计算可注册域名。这样才能把 `api.shop.example.co.uk` 正确标准化为 `example.co.uk`，而不是使用不可靠的“取最后两段”规则。
 
 `.cn` 使用 CNNIC WHOIS 查询。CNNIC WHOIS 返回的时间字段没有显式时区，节点会按 UTC 输出为 ISO 8601 字符串，以保持输出格式稳定。
+
+`.io` 和 `.co` 使用各自注册局 WHOIS 查询。WHOIS 响应中的注册人、联系人、地址、电话等个人信息字段不会进入节点输出。
 
 ## 构建说明
 

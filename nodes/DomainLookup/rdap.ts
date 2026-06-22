@@ -5,6 +5,7 @@ import {
 	type NormalizedDomain,
 } from './domainUtils';
 import { lookupCnDomainRegistration } from './whoisCn';
+import { isRegistryWhoisTld, lookupRegistryWhoisDomainRegistration } from './whoisRegistry';
 import {
 	createFailureOutput,
 	createNotFoundOutput,
@@ -67,6 +68,10 @@ export async function lookupDomainRegistration(
 		return lookupCnDomainRegistration(normalized, now);
 	}
 
+	if (isRegistryWhoisTld(normalized.tld)) {
+		return lookupRegistryWhoisDomainRegistration(normalized, now);
+	}
+
 	const bootstrap = await getBootstrap(httpRequest);
 	const authoritativeBaseUrls = findBootstrapUrls(bootstrap, normalized.tld);
 
@@ -74,7 +79,7 @@ export async function lookupDomainRegistration(
 		return createFailureOutput(
 			normalized,
 			DOMAIN_LOOKUP_ERROR_CODES.TLD_NOT_SUPPORTED,
-			`TLD ".${normalized.tld}" is not supported. This package supports .cn through CNNIC WHOIS and TLDs published in the IANA RDAP DNS bootstrap.`,
+			`TLD ".${normalized.tld}" is not supported. This package supports .cn, .io, and .co through WHOIS and TLDs published in the IANA RDAP DNS bootstrap.`,
 		);
 	}
 

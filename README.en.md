@@ -10,15 +10,15 @@ The first node, **Domain Lookup**, accepts a domain, subdomain, or HTTP(S) URL a
 
 - Normalize user input to an ASCII registrable domain.
 - Collapse subdomains to the registrable domain, for example `api.shop.example.co.uk` to `example.co.uk`.
-- Query free IANA RDAP or CNNIC WHOIS sources without credentials or API keys.
+- Query free IANA RDAP or registry WHOIS sources without credentials or API keys.
 - Return a stable output shape for registered, not found, and failure cases.
 - Exclude registrant, contact, address, phone, and other personal data.
 
 ## Lookup Routes
 
-The node currently has two lookup routes:
+The node currently has two lookup route types:
 
-- Domains whose root TLD is `.cn`, including `.cn`, `.com.cn`, `.net.cn`, and `.org.cn`: queried directly through CNNIC WHOIS `whois.cnnic.cn:43`; they do not use the generic RDAP fallback path.
+- Dedicated WHOIS providers: domains whose root TLD is `.cn` use CNNIC WHOIS `whois.cnnic.cn:43`; root TLD `.io` uses `whois.nic.io:43`; root TLD `.co` uses `whois.registry.co:43`.
 - TLDs published in the IANA RDAP DNS bootstrap: fetched at runtime from `https://data.iana.org/rdap/dns.json` and cached in the current n8n process for up to 24 hours.
 
 Common lookup examples:
@@ -29,8 +29,12 @@ Common lookup examples:
 - `.xyz`
 - `.uk`
 - `.cn`
+- `.io`
+- `.co`
 
-If the normalized TLD is neither handled by the `.cn` route nor present in the runtime IANA RDAP DNS bootstrap, the node returns a structured `TLD_NOT_SUPPORTED` result and does not request RDAP fallback. This prevents "no authoritative lookup source" from being misreported as "domain is not registered".
+Dedicated WHOIS providers do not use RDAP fallback. RDAP fallback is only an internal reliability mechanism for the RDAP route.
+
+If the normalized TLD is neither handled by a dedicated WHOIS provider nor present in the runtime IANA RDAP DNS bootstrap, the node returns a structured `TLD_NOT_SUPPORTED` result and does not request RDAP fallback. This prevents "no authoritative lookup source" from being misreported as "domain is not registered".
 
 ## Node
 
@@ -73,7 +77,7 @@ Output fields are grouped by purpose:
 
 `isRegistered` is the field that distinguishes a found domain from an authoritative not-found response.
 
-For `.cn` lookups, `source.protocol` is `whois`. For RDAP lookups, `source.protocol` is `rdap`.
+For `.cn`, `.io`, and `.co` lookups, `source.protocol` is `whois`. For RDAP lookups, `source.protocol` is `rdap`.
 
 For successful lookups and authoritative not-found responses, `error` is `null`. When the node cannot determine the registration status, `isRegistered` is `null` and `error.code` contains the reason, for example `TLD_NOT_SUPPORTED`.
 
@@ -90,6 +94,9 @@ Error handling:
 | `RDAP_BOOTSTRAP_UNAVAILABLE`        | The IANA RDAP bootstrap request failed or returned an invalid structure     |
 | `RDAP_SOURCE_UNAVAILABLE`           | The RDAP HTTP, network, or service source is unavailable                    |
 | `RDAP_RESPONSE_PARSE_FAILED`        | The RDAP response could not be parsed as a domain object                    |
+| `WHOIS_SOURCE_UNAVAILABLE`          | The registry WHOIS connection, timeout, or network path is unavailable      |
+| `WHOIS_RATE_LIMITED`                | Registry WHOIS returned a rate limit response                               |
+| `WHOIS_RESPONSE_PARSE_FAILED`       | The registry WHOIS response could not be parsed as a domain record          |
 | `CNNIC_WHOIS_UNAVAILABLE`           | The CNNIC WHOIS connection, timeout, or network path is unavailable         |
 | `CNNIC_WHOIS_RATE_LIMITED`          | CNNIC WHOIS returned a rate limit response                                  |
 | `CNNIC_WHOIS_RESPONSE_PARSE_FAILED` | The CNNIC WHOIS response could not be parsed as a domain record             |
@@ -132,6 +139,8 @@ npm run format:check
 This package uses `tldts` to calculate the registrable domain from the ICANN Public Suffix List. This is required so inputs like `api.shop.example.co.uk` normalize correctly to `example.co.uk` instead of using an unsafe "last two labels" rule.
 
 `.cn` uses CNNIC WHOIS. CNNIC WHOIS timestamps do not include an explicit timezone, so the node outputs them as UTC ISO 8601 strings to keep the output format stable.
+
+`.io` and `.co` use their registry WHOIS services. Registrant, contact, address, phone, and other personal data from WHOIS responses are not included in the node output.
 
 ## Build Note
 

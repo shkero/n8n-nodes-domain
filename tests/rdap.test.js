@@ -416,7 +416,7 @@ test('returns structured output when IANA bootstrap does not support the TLD', a
 	assert.deepEqual(output.error, {
 		code: 'TLD_NOT_SUPPORTED',
 		message:
-			'TLD ".unsupported" is not supported. This package supports .cn through CNNIC WHOIS and TLDs published in the IANA RDAP DNS bootstrap.',
+			'TLD ".unsupported" is not supported. This package supports .cn, .io, and .co through WHOIS and TLDs published in the IANA RDAP DNS bootstrap.',
 	});
 });
 
@@ -492,3 +492,69 @@ test('routes .cn through CNNIC WHOIS without RDAP fallback', async () => {
 		net.createConnection = originalCreateConnection;
 	}
 });
+
+for (const testCase of [
+	{
+		tld: 'io',
+		normalized: { asciiDomain: 'example.io', publicSuffix: 'io', tld: 'io' },
+		expectedHost: 'whois.nic.io',
+		response: [
+			'Domain Name: example.io',
+			'Domain Status: clientTransferProhibited https://icann.org/epp#clientTransferProhibited',
+			'Creation Date: 2021-11-22T01:38:41Z',
+			'Registry Expiry Date: 2027-11-22T01:38:41Z',
+		].join('\n'),
+	},
+	{
+		tld: 'co',
+		normalized: { asciiDomain: 'example.co', publicSuffix: 'co', tld: 'co' },
+		expectedHost: 'whois.registry.co',
+		response: [
+			'Domain Name: EXAMPLE.CO',
+			'Domain Status: serverTransferProhibited https://icann.org/epp#serverTransferProhibited',
+			'Creation Date: 2026-05-18T07:19:58.0Z',
+			'Registry Expiry Date: 2027-05-18T23:59:59.0Z',
+		].join('\n'),
+	},
+]) {
+	test(`routes .${testCase.tld} through registry WHOIS without RDAP fallback`, async () => {
+		const originalCreateConnection = net.createConnection;
+		let connectCount = 0;
+		let httpCalled = false;
+
+		net.createConnection = function (options, connectionListener) {
+			connectCount++;
+			assert.equal(options.host, testCase.expectedHost);
+
+			const socket = new (require('node:events').EventEmitter)();
+			socket.write = () => {};
+			socket.setEncoding = () => {};
+			socket.setTimeout = () => {};
+			socket.destroy = () => {};
+
+			process.nextTick(() => {
+				if (connectionListener) connectionListener();
+				socket.emit('data', testCase.response);
+				socket.emit('close');
+			});
+
+			return socket;
+		};
+
+		try {
+			const output = await lookupDomainRegistration(testCase.normalized, async () => {
+				httpCalled = true;
+				throw new Error('RDAP should not be called for registry WHOIS TLDs');
+			});
+
+			assert.equal(connectCount, 1);
+			assert.equal(httpCalled, false);
+			assert.equal(output.isRegistered, true);
+			assert.equal(output.source.protocol, 'whois');
+			assert.equal(output.source.type, 'authoritative');
+			assert.equal(output.error, null);
+		} finally {
+			net.createConnection = originalCreateConnection;
+		}
+	});
+}
