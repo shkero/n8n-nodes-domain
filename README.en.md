@@ -14,14 +14,14 @@ The first node, **Domain Lookup**, accepts a domain, subdomain, or HTTP(S) URL a
 - Return a stable output shape for registered, not found, and failure cases.
 - Exclude registrant, contact, address, phone, and other personal data.
 
-## Supported TLDs
+## Lookup Routes
 
-This package supports two TLD groups:
+The node currently has two lookup routes:
 
 - Domains whose root TLD is `.cn`, including `.cn`, `.com.cn`, `.net.cn`, and `.org.cn`: queried directly through CNNIC WHOIS `whois.cnnic.cn:43`; they do not use the generic RDAP fallback path.
-- TLDs published in the IANA RDAP DNS bootstrap: fetched at runtime from `https://data.iana.org/rdap/dns.json` and cached for 24 hours.
+- TLDs published in the IANA RDAP DNS bootstrap: fetched at runtime from `https://data.iana.org/rdap/dns.json` and cached in the current n8n process for up to 24 hours.
 
-Common supported examples:
+Common lookup examples:
 
 - `.com`
 - `.net`
@@ -30,9 +30,7 @@ Common supported examples:
 - `.uk`
 - `.cn`
 
-`.xyz` is only a common IANA RDAP-covered example, not a project-specific special case.
-
-If a TLD is not supported by the IANA RDAP DNS bootstrap and this package has no project-specific provider for it, the node returns a structured `TLD_NOT_SUPPORTED` result and does not request RDAP fallback. This prevents "no authoritative lookup source" from being misreported as "domain is not registered". `.co` and `.io` are not supported by default at this time.
+If the normalized TLD is neither handled by the `.cn` route nor present in the runtime IANA RDAP DNS bootstrap, the node returns a structured `TLD_NOT_SUPPORTED` result and does not request RDAP fallback. This prevents "no authoritative lookup source" from being misreported as "domain is not registered".
 
 ## Node
 
@@ -42,22 +40,36 @@ Input:
 
 - `Domain`: required. Supports a domain, subdomain, HTTP(S) URL, or no-protocol URL-like value.
 
-Output fields:
+Optional settings:
 
-- `asciiDomain`
-- `publicSuffix`
-- `isRegistered`
-- `status`
-- `dates.registeredAt`
-- `dates.expiresAt`
-- `dates.lastChangedAt`
-- `dates.dataUpdatedAt`
-- `expiry.expiresAtTimestamp`
-- `expiry.daysUntilExpiration`
-- `expiry.isExpired`
-- `nameservers`
-- `source`
-- `error`
+- `Include Input Data`: disabled until this option is added in `Options`; once added, it defaults to enabled and copies the current input item's `json` data into the output.
+- `Input Data Mode`: `All Fields` copies the full input `json`; `Selected Fields` copies only the selected fields.
+- `Input Field Name`: output container field name, default `input`. It may only contain letters, numbers, and underscores, and cannot conflict with node output fields.
+- `Input Fields`: used in `Selected Fields` mode. It accepts comma-separated or newline-separated field paths, and supports dragging multiple fields from the n8n input data panel. Missing fields are ignored.
+
+`Input Fields` expects field paths, not field values. For non-ASCII field names or field names containing special characters, use bracket notation.
+
+`Input Fields` examples:
+
+```text
+recordId, fields.domain, fields["Chinese Field"].text
+```
+
+Common n8n current-item path syntax is also supported:
+
+```text
+$json.fields["expiresAt"]
+={{ $json.fields["Chinese Field"].text }}
+```
+
+Output fields are grouped by purpose:
+
+- Domain: `asciiDomain`, `publicSuffix`
+- Registration status: `isRegistered`, `status`
+- Dates and expiration: `dates`, `expiry`
+- DNS: `nameservers`
+- Lookup source: `source`
+- Error details: `error`
 
 `isRegistered` is the field that distinguishes a found domain from an authoritative not-found response.
 
@@ -69,7 +81,7 @@ RDAP fallback is an internal reliability mechanism, not a node option. When fall
 
 `expiry.expiresAtTimestamp` is the millisecond timestamp for `dates.expiresAt`; it is `null` when no valid expiration time is available. `expiry.daysUntilExpiration` is calculated from the current node execution time and expiration time, rounded down to whole days. This node does not output reminder thresholds; reminder timing should be handled by downstream n8n nodes.
 
-Common error codes:
+Error handling:
 
 | Error Code                          | Meaning                                                                     |
 | ----------------------------------- | --------------------------------------------------------------------------- |

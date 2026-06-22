@@ -15,14 +15,14 @@
 - 可选将当前输入 item 的 `json` 数据合并到查询结果中，方便后续节点继续使用前置数据。
 - 不输出注册人、联系人、地址、电话等个人信息字段。
 
-## 支持的顶级域名
+## 查询路线
 
-当前支持两类顶级域名：
+节点当前有两条查询路线：
 
 - 根 TLD 为 `.cn` 的域名，包括 `.cn`、`.com.cn`、`.net.cn`、`.org.cn` 等：直接查询 CNNIC WHOIS `whois.cnnic.cn:43`，不走通用 RDAP fallback。
-- IANA RDAP DNS bootstrap 中发布了 RDAP endpoint 的顶级域名：运行时从 `https://data.iana.org/rdap/dns.json` 获取并缓存 24 小时。
+- IANA RDAP DNS bootstrap 中发布了 RDAP endpoint 的 TLD：运行时从 `https://data.iana.org/rdap/dns.json` 获取，并在当前 n8n 进程内缓存最多 24 小时。
 
-常见可支持示例：
+常见可查询示例：
 
 - `.com`
 - `.net`
@@ -31,9 +31,7 @@
 - `.uk`
 - `.cn`
 
-`.xyz` 只是 IANA RDAP 覆盖的普通示例，不是项目内专用支持项。
-
-如果 IANA RDAP DNS bootstrap 不支持某个 TLD，且项目没有专用 provider，节点会输出结构化 `TLD_NOT_SUPPORTED` 结果，不请求 RDAP fallback，避免把“没有权威查询来源”误判为“域名未注册”。`.co`、`.io` 当前没有默认专用支持。
+如果标准化后的 TLD 既不属于 `.cn` 查询路线，也没有出现在运行时 IANA RDAP DNS bootstrap 中，节点会输出结构化 `TLD_NOT_SUPPORTED` 结果，不请求 RDAP fallback，避免把“没有权威查询来源”误判为“域名未注册”。
 
 ## 节点
 
@@ -65,22 +63,14 @@ $json.fields["到期时间"]
 ={{ $json.fields["中文字段"].text }}
 ```
 
-输出字段：
+输出字段按用途分为：
 
-- `asciiDomain`
-- `publicSuffix`
-- `isRegistered`
-- `status`
-- `dates.registeredAt`
-- `dates.expiresAt`
-- `dates.lastChangedAt`
-- `dates.dataUpdatedAt`
-- `expiry.expiresAtTimestamp`
-- `expiry.daysUntilExpiration`
-- `expiry.isExpired`
-- `nameservers`
-- `source`
-- `error`
+- 域名：`asciiDomain`、`publicSuffix`
+- 注册状态：`isRegistered`、`status`
+- 时间：`dates`、`expiry`
+- DNS：`nameservers`
+- 查询来源：`source`
+- 错误信息：`error`
 
 `isRegistered` 是区分“已找到域名”和“权威来源返回未找到”的字段。
 
@@ -92,7 +82,7 @@ RDAP fallback 是内部可靠性机制，不是节点选项。fallback 成功时
 
 `expiry.expiresAtTimestamp` 是 `dates.expiresAt` 对应的毫秒时间戳；没有有效到期时间时为 `null`。`expiry.daysUntilExpiration` 使用当前节点执行时间和到期时间计算，按完整天数向下取整。本节点不输出提醒阈值；提前多少天提醒应由后续 n8n 节点处理。
 
-常见错误码：
+错误处理：
 
 | 错误码                              | 含义                                          |
 | ----------------------------------- | --------------------------------------------- |
