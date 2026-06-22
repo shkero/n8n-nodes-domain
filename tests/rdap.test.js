@@ -1,5 +1,6 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
+const net = require('node:net');
 
 const {
 	clearRdapBootstrapCache,
@@ -63,6 +64,7 @@ test('maps RDAP domain fields to stable output', () => {
 		isExpired: false,
 	});
 	assert.deepEqual(output.nameservers, ['a.iana-servers.net', 'b.iana-servers.net']);
+	assert.equal(output.error, null);
 });
 
 test('maps missing expiration to null expiry', () => {
@@ -132,6 +134,7 @@ test('returns authoritative success and preserves source URL', async () => {
 	assert.equal(output.isRegistered, true);
 	assert.equal(output.source.type, 'authoritative');
 	assert.equal(output.source.url, 'https://rdap.example.test/domain/example.com');
+	assert.equal(output.error, null);
 });
 
 test('returns not found on authoritative 404 without fallback', async () => {
@@ -148,13 +151,49 @@ test('returns not found on authoritative 404 without fallback', async () => {
 
 	assert.equal(output.isRegistered, false);
 	assert.equal(output.source.type, 'authoritative');
+	assert.equal(output.error, null);
 	assert.deepEqual(calls, [
 		'https://data.iana.org/rdap/dns.json',
 		'https://rdap.example.test/domain/example.com',
 	]);
 });
 
-test('falls back after authoritative provider failures', async () => {
+for (const statusCode of [429, 500]) {
+	test(`falls back to rdap.net after authoritative HTTP ${statusCode}`, async () => {
+		clearRdapBootstrapCache();
+		const calls = [];
+		const output = await lookupDomainRegistration(normalized, async (options) => {
+			calls.push(options.url);
+			if (options.url === 'https://data.iana.org/rdap/dns.json') {
+				return { statusCode: 200, body: bootstrap };
+			}
+
+			if (options.url === 'https://www.rdap.net/domain/example.com') {
+				return {
+					statusCode: 200,
+					body: {
+						objectClassName: 'domain',
+						events: [{ eventAction: 'expiration', eventDate: '2027-08-13T04:00:00Z' }],
+					},
+				};
+			}
+
+			return { statusCode, body: {} };
+		});
+
+		assert.deepEqual(calls, [
+			'https://data.iana.org/rdap/dns.json',
+			'https://rdap.example.test/domain/example.com',
+			'https://www.rdap.net/domain/example.com',
+		]);
+		assert.equal(output.isRegistered, true);
+		assert.equal(output.source.type, 'fallback');
+		assert.equal(output.source.url, 'https://www.rdap.net/domain/example.com');
+		assert.equal(output.error, null);
+	});
+}
+
+test('falls back to rdap.net after authoritative network failure', async () => {
 	clearRdapBootstrapCache();
 	const calls = [];
 	const output = await lookupDomainRegistration(normalized, async (options) => {
@@ -163,7 +202,7 @@ test('falls back after authoritative provider failures', async () => {
 			return { statusCode: 200, body: bootstrap };
 		}
 
-		if (options.url === 'https://rdap.org/domain/example.com') {
+		if (options.url === 'https://www.rdap.net/domain/example.com') {
 			return {
 				statusCode: 200,
 				body: {
@@ -173,38 +212,98 @@ test('falls back after authoritative provider failures', async () => {
 			};
 		}
 
-		return { statusCode: 500, body: {} };
+		throw new Error('socket hang up');
 	});
 
 	assert.deepEqual(calls, [
 		'https://data.iana.org/rdap/dns.json',
 		'https://rdap.example.test/domain/example.com',
-		'https://rdap.org/domain/example.com',
+		'https://www.rdap.net/domain/example.com',
 	]);
-	assert.equal(output.isRegistered, true);
 	assert.equal(output.source.type, 'fallback');
 });
 
-test('throws when IANA bootstrap does not support the TLD', async () => {
+test('falls back to rdap.net after invalid authoritative RDAP response', async () => {
 	clearRdapBootstrapCache();
 	const calls = [];
-	await assert.rejects(
-		lookupDomainRegistration(
-			{ asciiDomain: 'example.invalid', publicSuffix: 'invalid', tld: 'invalid' },
-			async (options) => {
+	const output = await lookupDomainRegistration(normalized, async (options) => {
+		calls.push(options.url);
+		if (options.url === 'https://data.iana.org/rdap/dns.json') {
+			return { statusCode: 200, body: bootstrap };
+		}
+
+		if (options.url === 'https://www.rdap.net/domain/example.com') {
+			return {
+				statusCode: 200,
+				body: {
+					objectClassName: 'domain',
+					events: [{ eventAction: 'expiration', eventDate: '2027-08-13T04:00:00Z' }],
+				},
+			};
+		}
+
+		return { statusCode: 200, body: 'not json' };
+	});
+
+	assert.deepEqual(calls, [
+		'https://data.iana.org/rdap/dns.json',
+		'https://rdap.example.test/domain/example.com',
+		'https://www.rdap.net/domain/example.com',
+	]);
+	assert.equal(output.source.type, 'fallback');
+});
+
+for (const statusCode of [400, 401, 403]) {
+	test(`does not fallback after authoritative HTTP ${statusCode}`, async () => {
+		clearRdapBootstrapCache();
+		const calls = [];
+		await assert.rejects(
+			lookupDomainRegistration(normalized, async (options) => {
 				calls.push(options.url);
-				return { statusCode: 200, body: bootstrap };
-			},
-		),
-		/TLD "\.invalid" is not supported/,
+				if (options.url === 'https://data.iana.org/rdap/dns.json') {
+					return { statusCode: 200, body: bootstrap };
+				}
+
+				return { statusCode, body: {} };
+			}),
+			new RegExp(`HTTP ${statusCode}`),
+		);
+
+		assert.deepEqual(calls, [
+			'https://data.iana.org/rdap/dns.json',
+			'https://rdap.example.test/domain/example.com',
+		]);
+	});
+}
+
+test('returns structured output when IANA bootstrap does not support the TLD', async () => {
+	clearRdapBootstrapCache();
+	const calls = [];
+	const output = await lookupDomainRegistration(
+		{ asciiDomain: 'example.unsupported', publicSuffix: 'unsupported', tld: 'unsupported' },
+		async (options) => {
+			calls.push(options.url);
+			return { statusCode: 200, body: bootstrap };
+		},
 	);
+
 	assert.deepEqual(calls, ['https://data.iana.org/rdap/dns.json']);
+	assert.equal(output.asciiDomain, 'example.unsupported');
+	assert.equal(output.isRegistered, null);
+	assert.equal(output.source, null);
+	assert.deepEqual(output.error, {
+		code: 'TLD_NOT_SUPPORTED',
+		message:
+			'TLD ".unsupported" is not supported. This package supports .cn through CNNIC WHOIS and TLDs published in the IANA RDAP DNS bootstrap.',
+	});
 });
 
 test('throws when every RDAP source fails', async () => {
 	clearRdapBootstrapCache();
+	const calls = [];
 	await assert.rejects(
 		lookupDomainRegistration(normalized, async (options) => {
+			calls.push(options.url);
 			if (options.url === 'https://data.iana.org/rdap/dns.json') {
 				return { statusCode: 200, body: bootstrap };
 			}
@@ -213,4 +312,59 @@ test('throws when every RDAP source fails', async () => {
 		}),
 		/All RDAP sources failed/,
 	);
+	assert.deepEqual(calls, [
+		'https://data.iana.org/rdap/dns.json',
+		'https://rdap.example.test/domain/example.com',
+		'https://www.rdap.net/domain/example.com',
+	]);
+});
+
+test('routes .cn through CNNIC WHOIS without RDAP fallback', async () => {
+	const originalCreateConnection = net.createConnection;
+	let connectCount = 0;
+	let httpCalled = false;
+
+	net.createConnection = function (options, connectionListener) {
+		connectCount++;
+		const socket = new (require('node:events').EventEmitter)();
+		socket.write = () => {};
+		socket.setEncoding = () => {};
+		socket.setTimeout = () => {};
+		socket.destroy = () => {};
+
+		process.nextTick(() => {
+			if (connectionListener) connectionListener();
+			socket.emit(
+				'data',
+				[
+					'Domain Name: example.cn',
+					'ROID: 20050505s10001s11652376-cn',
+					'Domain Status: ok',
+					'Registration Time: 2021-07-09 12:16:35',
+					'Expiration Time: 2027-07-09 12:16:35',
+				].join('\n'),
+			);
+			socket.emit('close');
+		});
+
+		return socket;
+	};
+
+	try {
+		const output = await lookupDomainRegistration(
+			{ asciiDomain: 'example.cn', publicSuffix: 'cn', tld: 'cn' },
+			async () => {
+				httpCalled = true;
+				throw new Error('RDAP should not be called for .cn');
+			},
+		);
+
+		assert.equal(connectCount, 1);
+		assert.equal(httpCalled, false);
+		assert.equal(output.isRegistered, true);
+		assert.equal(output.source.protocol, 'whois');
+		assert.equal(output.error, null);
+	} finally {
+		net.createConnection = originalCreateConnection;
+	}
 });

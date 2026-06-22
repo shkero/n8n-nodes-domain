@@ -50,7 +50,7 @@ test('maps CNNIC WHOIS domain records to the standard output shape', () => {
 	assert.equal(output.expiry.isExpired, false);
 	assert.equal(output.source.protocol, 'whois');
 	assert.equal(output.source.type, 'authoritative');
-	assert.equal(output.error, undefined);
+	assert.equal(output.error, null);
 });
 
 test('maps CNNIC WHOIS no matching record to not registered', () => {
@@ -60,6 +60,7 @@ test('maps CNNIC WHOIS no matching record to not registered', () => {
 	assert.deepEqual(output.status, []);
 	assert.deepEqual(output.nameservers, []);
 	assert.equal(output.source.protocol, 'whois');
+	assert.equal(output.error, null);
 });
 
 test('mapCnnicWhoisResponse throws error for empty response', () => {

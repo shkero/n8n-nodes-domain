@@ -1,7 +1,7 @@
 {
 	"name": "n8n-nodes-domain",
 	"version": "0.1.6",
-	"description": "n8n community node for domain registration lookups using RDAP.",
+	"description": "n8n community node for domain registration lookups using RDAP and WHOIS.",
 	"license": "MIT",
 	"homepage": "https://github.com/shkero/n8n-nodes-domain",
 	"keywords": [

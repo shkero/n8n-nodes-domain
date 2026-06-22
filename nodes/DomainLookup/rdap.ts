@@ -1,6 +1,7 @@
 import { DOMAIN_LOOKUP_ERROR_CODES, DomainLookupError, type NormalizedDomain } from './domainUtils';
 import { lookupCnDomainRegistration } from './whoisCn';
 import {
+	createFailureOutput,
 	createNotFoundOutput,
 	createRegisteredOutput,
 	type DomainLookupOutput,
@@ -11,7 +12,7 @@ export const BOOTSTRAP_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 export const REQUEST_TIMEOUT_MS = 5_000;
 export const IANA_RDAP_DNS_BOOTSTRAP_URL = 'https://data.iana.org/rdap/dns.json';
 
-const FALLBACK_RDAP_URLS = ['https://rdap.org/domain/', 'https://www.rdap.net/domain/'];
+const FALLBACK_RDAP_URLS = ['https://www.rdap.net/domain/'];
 
 export interface HttpRequestOptions {
 	method: 'GET';
@@ -44,6 +45,7 @@ interface RequestNotFound {
 interface RequestFailure {
 	kind: 'failure';
 	message: string;
+	fallbackEligible: boolean;
 }
 
 type RequestResult = RequestSuccess | RequestNotFound | RequestFailure;
@@ -63,11 +65,14 @@ export async function lookupDomainRegistration(
 	const authoritativeBaseUrls = findBootstrapUrls(bootstrap, normalized.tld);
 
 	if (authoritativeBaseUrls.length === 0) {
-		throw new DomainLookupError(
+		return createFailureOutput(
+			normalized,
+			DOMAIN_LOOKUP_ERROR_CODES.TLD_NOT_SUPPORTED,
 			`TLD ".${normalized.tld}" is not supported. This package supports .cn through CNNIC WHOIS and TLDs published in the IANA RDAP DNS bootstrap.`,
-			DOMAIN_LOOKUP_ERROR_CODES.TLD_RDAP_NOT_SUPPORTED,
 		);
 	}
+
+	const failures: RequestFailure[] = [];
 
 	for (const baseUrl of authoritativeBaseUrls) {
 		const url = buildRdapDomainUrl(baseUrl, normalized.asciiDomain);
@@ -77,6 +82,25 @@ export async function lookupDomainRegistration(
 		if (output) {
 			return output;
 		}
+
+		if (result.kind === 'failure') {
+			failures.push(result);
+		}
+	}
+
+	const blockingFailure = failures.find((failure) => !failure.fallbackEligible);
+	if (blockingFailure) {
+		throw new DomainLookupError(
+			blockingFailure.message,
+			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+		);
+	}
+
+	if (failures.length === 0) {
+		throw new DomainLookupError(
+			'All authoritative RDAP sources failed',
+			DOMAIN_LOOKUP_ERROR_CODES.RDAP_SOURCE_UNAVAILABLE,
+		);
 	}
 
 	for (const baseUrl of FALLBACK_RDAP_URLS) {
@@ -232,6 +256,7 @@ async function requestRdap(url: string, httpRequest: HttpRequest): Promise<Reque
 		return {
 			kind: 'failure',
 			message: 'RDAP response is not a domain object',
+			fallbackEligible: true,
 		};
 	}
 
@@ -266,6 +291,7 @@ async function requestJson(url: string, httpRequest: HttpRequest): Promise<Reque
 			return {
 				kind: 'failure',
 				message: `HTTP ${statusCode ?? 'unknown'} from ${url}`,
+				fallbackEligible: isFallbackEligibleHttpStatus(statusCode),
 			};
 		}
 
@@ -281,6 +307,7 @@ async function requestJson(url: string, httpRequest: HttpRequest): Promise<Reque
 				return {
 					kind: 'failure',
 					message: 'Response body is not valid JSON',
+					fallbackEligible: true,
 				};
 			}
 		}
@@ -302,8 +329,17 @@ async function requestJson(url: string, httpRequest: HttpRequest): Promise<Reque
 		return {
 			kind: 'failure',
 			message: error instanceof Error ? error.message : 'Request failed',
+			fallbackEligible: isFallbackEligibleHttpStatus(statusCode),
 		};
 	}
+}
+
+function isFallbackEligibleHttpStatus(statusCode: number | null): boolean {
+	if (statusCode === null) {
+		return true;
+	}
+
+	return statusCode === 429 || statusCode >= 500;
 }
 
 function getStatusCode(response: unknown): number | null {

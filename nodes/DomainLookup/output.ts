@@ -26,10 +26,7 @@ export interface DomainLookupOutput {
 	};
 	nameservers: string[];
 	source: LookupSource | null;
-	error?: {
-		code: string;
-		message: string;
-	};
+	error: { code: string; message: string } | null;
 }
 
 export function createFailureOutput(
@@ -96,6 +93,7 @@ export function createRegisteredOutput(
 		},
 		nameservers: uniqueSortedStrings(values.nameservers ?? []),
 		source,
+		error: null,
 	};
 }
 
@@ -120,6 +118,7 @@ export function createNotFoundOutput(
 		},
 		nameservers: [],
 		source,
+		error: null,
 	};
 }
 

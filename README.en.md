@@ -4,13 +4,13 @@
 
 An n8n community node package for looking up domain registration information.
 
-The first node, **Domain Lookup**, accepts a domain, subdomain, or HTTP(S) URL and returns normalized RDAP registration data that can be used in n8n workflows for expiration checks.
+The first node, **Domain Lookup**, accepts a domain, subdomain, or HTTP(S) URL and returns normalized domain registration data that can be used in n8n workflows for expiration checks.
 
 ## Features
 
 - Normalize user input to an ASCII registrable domain.
 - Collapse subdomains to the registrable domain, for example `api.shop.example.co.uk` to `example.co.uk`.
-- Query free RDAP sources without credentials or API keys.
+- Query free IANA RDAP or CNNIC WHOIS sources without credentials or API keys.
 - Return a stable output shape for registered, not found, and failure cases.
 - Exclude registrant, contact, address, phone, and other personal data.
 
@@ -18,7 +18,7 @@ The first node, **Domain Lookup**, accepts a domain, subdomain, or HTTP(S) URL a
 
 This package supports two TLD groups:
 
-- `.cn`: queried directly through CNNIC WHOIS `whois.cnnic.cn:43`; it does not use the generic RDAP fallback path.
+- Domains whose root TLD is `.cn`, including `.cn`, `.com.cn`, `.net.cn`, and `.org.cn`: queried directly through CNNIC WHOIS `whois.cnnic.cn:43`; they do not use the generic RDAP fallback path.
 - TLDs published in the IANA RDAP DNS bootstrap: fetched at runtime from `https://data.iana.org/rdap/dns.json` and cached for 24 hours.
 
 Common supported examples:
@@ -26,11 +26,13 @@ Common supported examples:
 - `.com`
 - `.net`
 - `.org`
-- `.io`
+- `.xyz`
 - `.uk`
 - `.cn`
 
-Unsupported TLDs do not enter the RDAP fallback lookup flow. The node returns an unsupported TLD error instead, so "no authoritative lookup source" is not misreported as "domain is not registered".
+`.xyz` is only a common IANA RDAP-covered example, not a project-specific special case.
+
+If a TLD is not supported by the IANA RDAP DNS bootstrap and this package has no project-specific provider for it, the node returns a structured `TLD_NOT_SUPPORTED` result and does not request RDAP fallback. This prevents "no authoritative lookup source" from being misreported as "domain is not registered". `.co` and `.io` are not supported by default at this time.
 
 ## Node
 
@@ -54,10 +56,15 @@ Output fields:
 - `expiry.isExpired`
 - `nameservers`
 - `source`
+- `error`
 
 `isRegistered` is the field that distinguishes a found domain from an authoritative not-found response.
 
 For `.cn` lookups, `source.protocol` is `whois`. For RDAP lookups, `source.protocol` is `rdap`.
+
+For successful lookups and authoritative not-found responses, `error` is `null`. When the node cannot determine the registration status, `isRegistered` is `null` and `error.code` contains the reason, for example `TLD_NOT_SUPPORTED`.
+
+RDAP fallback is an internal reliability mechanism, not a node option. When fallback succeeds, `source.type` is `fallback`, and `source.url` records the fallback entry URL requested by this node.
 
 ## Development
 

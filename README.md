@@ -4,13 +4,13 @@
 
 用于查询域名注册信息的 n8n community node 包。
 
-当前提供的第一个节点是 **Domain Lookup**。它接收域名、子域名或 HTTP(S) URL，并返回标准化后的 RDAP 注册信息，可用于 n8n 工作流中的域名到期检查。
+当前提供的第一个节点是 **Domain Lookup**。它接收域名、子域名或 HTTP(S) URL，并返回标准化后的域名注册信息，可用于 n8n 工作流中的域名到期检查。
 
 ## 功能
 
 - 将用户输入标准化为 ASCII 可注册域名。
 - 自动把子域名归并到可注册域名，例如 `api.shop.example.co.uk` 会归并为 `example.co.uk`。
-- 查询免费的 RDAP 数据源，不需要 credentials 或 API key。
+- 查询免费的 IANA RDAP 或 CNNIC WHOIS 数据源，不需要 credentials 或 API key。
 - 为已注册、未找到和失败场景返回稳定的输出结构。
 - 可选将当前输入 item 的 `json` 数据合并到查询结果中，方便后续节点继续使用前置数据。
 - 不输出注册人、联系人、地址、电话等个人信息字段。
@@ -19,7 +19,7 @@
 
 当前支持两类顶级域名：
 
-- `.cn`：直接查询 CNNIC WHOIS `whois.cnnic.cn:43`，不走通用 RDAP fallback。
+- 根 TLD 为 `.cn` 的域名，包括 `.cn`、`.com.cn`、`.net.cn`、`.org.cn` 等：直接查询 CNNIC WHOIS `whois.cnnic.cn:43`，不走通用 RDAP fallback。
 - IANA RDAP DNS bootstrap 中发布了 RDAP endpoint 的顶级域名：运行时从 `https://data.iana.org/rdap/dns.json` 获取并缓存 24 小时。
 
 常见可支持示例：
@@ -27,11 +27,13 @@
 - `.com`
 - `.net`
 - `.org`
-- `.io`
+- `.xyz`
 - `.uk`
 - `.cn`
 
-不支持的顶级域名不会进入 RDAP fallback 检查流程，会直接返回不支持错误，避免把“没有权威查询来源”误判为“域名未注册”。
+`.xyz` 只是 IANA RDAP 覆盖的普通示例，不是项目内专用支持项。
+
+如果 IANA RDAP DNS bootstrap 不支持某个 TLD，且项目没有专用 provider，节点会输出结构化 `TLD_NOT_SUPPORTED` 结果，不请求 RDAP fallback，避免把“没有权威查询来源”误判为“域名未注册”。`.co`、`.io` 当前没有默认专用支持。
 
 ## 节点
 
@@ -77,10 +79,15 @@ $json.fields["到期时间"]
 - `expiry.isExpired`
 - `nameservers`
 - `source`
+- `error`
 
 `isRegistered` 是区分“已找到域名”和“权威来源返回未找到”的字段。
 
 `.cn` 查询的 `source.protocol` 为 `whois`；RDAP 查询的 `source.protocol` 为 `rdap`。
+
+查询成功或权威来源明确未找到时，`error` 为 `null`。无法判断注册状态时，`isRegistered` 为 `null`，并通过 `error.code` 输出原因，例如 `TLD_NOT_SUPPORTED`。
+
+RDAP fallback 是内部可靠性机制，不是节点选项。fallback 成功时，`source.type` 为 `fallback`，`source.url` 记录本节点请求的 fallback 入口 URL。
 
 ## 开发
 

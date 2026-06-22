@@ -30,7 +30,7 @@ export class DomainLookup implements INodeType {
 		},
 		group: ['transform'],
 		version: 1,
-		description: 'Look up domain registration information using RDAP',
+		description: 'Look up domain registration information using RDAP or WHOIS',
 		defaults: {
 			name: 'Domain Lookup',
 		},
