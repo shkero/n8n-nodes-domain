@@ -22,16 +22,19 @@
 - 专用 WHOIS provider：根 TLD 为 `.cn` 的域名查询 CNNIC WHOIS `whois.cnnic.cn:43`；根 TLD 为 `.io` 的域名查询 `whois.nic.io:43`；根 TLD 为 `.co` 的域名查询 `whois.registry.co:43`。
 - IANA RDAP DNS bootstrap 中发布了 RDAP endpoint 的 TLD：运行时从 `https://data.iana.org/rdap/dns.json` 获取，并在当前 n8n 进程内缓存最多 24 小时。
 
-常见可查询示例：
+专用 WHOIS 示例：
+
+- `.cn`
+- `.io`
+- `.co`
+
+常见 IANA RDAP 示例：
 
 - `.com`
 - `.net`
 - `.org`
 - `.xyz`
 - `.uk`
-- `.cn`
-- `.io`
-- `.co`
 
 专用 WHOIS 查询不走 RDAP fallback。RDAP fallback 只作为 RDAP 查询路线的内部可靠性机制。
 

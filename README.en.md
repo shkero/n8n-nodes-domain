@@ -21,16 +21,19 @@ The node currently has two lookup route types:
 - Dedicated WHOIS providers: domains whose root TLD is `.cn` use CNNIC WHOIS `whois.cnnic.cn:43`; root TLD `.io` uses `whois.nic.io:43`; root TLD `.co` uses `whois.registry.co:43`.
 - TLDs published in the IANA RDAP DNS bootstrap: fetched at runtime from `https://data.iana.org/rdap/dns.json` and cached in the current n8n process for up to 24 hours.
 
-Common lookup examples:
+Dedicated WHOIS examples:
+
+- `.cn`
+- `.io`
+- `.co`
+
+Common IANA RDAP examples:
 
 - `.com`
 - `.net`
 - `.org`
 - `.xyz`
 - `.uk`
-- `.cn`
-- `.io`
-- `.co`
 
 Dedicated WHOIS providers do not use RDAP fallback. RDAP fallback is only an internal reliability mechanism for the RDAP route.
 
